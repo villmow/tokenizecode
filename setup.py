@@ -17,6 +17,7 @@ setup(name='tokenizecode',
       },
       install_requires=[
             "tree_sitter",
+            "requests ",
             "python-magic",
             "tensortree",
       ],
