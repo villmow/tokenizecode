@@ -16,6 +16,8 @@ setup(name='tokenizecode',
             # ],
       },
       install_requires=[
+            "tree_sitter",
+            "python-magic",
             "tensortree",
       ],
       keywords=['source code', 'tokenization', 'parsing', 'code parser'],  # Keywords that define your package best
