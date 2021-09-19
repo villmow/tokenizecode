@@ -365,7 +365,17 @@ ALIAS_TO_LANGUAGE = {
 }
 
 
-def langdetect(filepath: Path) -> Optional[str]:
+def detect_lang(filepath: Path) -> Optional[str]:
+    possible_langs = detect_langs(filepath)
+
+    # just return the one we found
+    if len(possible_langs) == 1:
+        return possible_langs[0]
+    else:
+        log.info(f"{filepath}  belongs to multiple languages: {possible_langs}.")
+
+
+def detect_langs(filepath: Path) -> Optional[list[str]]:
     extension = filepath.suffix
 
     try:
@@ -376,7 +386,7 @@ def langdetect(filepath: Path) -> Optional[str]:
 
     # just return the one we found
     if len(possible_langs) == 1:
-        return possible_langs[0]
+        return possible_langs
 
     # check if there exists a file with same name, but different suffix
     points = {lang: 0 for lang in possible_langs}
@@ -387,11 +397,7 @@ def langdetect(filepath: Path) -> Optional[str]:
 
     langs_with_max_score = [lang for lang, score in points.items() if score == max(points.values())]
 
-    # just return the one we found
-    if len(langs_with_max_score) == 1:
-        return langs_with_max_score[0]
-    else:
-        log.info(f"{filepath} with extension '{extension}' belongs to multiple languages: {langs_with_max_score}.")
+    return langs_with_max_score
 
 
 def get_language_identifier(language_name: str) -> Optional[str]:

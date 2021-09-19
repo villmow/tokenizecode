@@ -1,7 +1,8 @@
 import logging
+from collections import Counter
 from pathlib import Path
 
-from typing import Callable, Union, Optional, Dict
+from typing import Callable, Union, Optional, Dict, Generator
 
 import numpy as np
 
@@ -11,7 +12,8 @@ import tensortree
 
 log = logging.getLogger(__name__)
 
-BPE_NONTERMINAL= "<[BPE]>"
+
+BPE_NONTERMINAL= "[BPE]"
 
 
 def encode_terminals(
@@ -183,6 +185,186 @@ class SentencePieceBPE(BaseTreeBPE):
             return "".join(text).replace('\u2581', ' ').strip()
 
         return text.replace(' ', '').replace('\u2581', ' ').strip()
+
+
+class WordPieceBPE(BaseTreeBPE):
+
+    def __init__(self, model: Union[str, Path]):
+        super().__init__()
+        try:
+            import tokenizers
+            self.model = tokenizers.Tokenizer.from_file(str(model))
+        except ImportError:
+            raise ImportError('Please install tokenizers with: pip install tokenizers')
+
+    # def encode(self, tree: TensorTree) -> TensorTree:
+    #     """
+    #     Main function. Applies BPE to all terminals in the linearized tree.
+    #     """
+    #     if not isinstance(tree, TensorTree):
+    #         raise ValueError(f"Can only encode a tensortree object and not {type(tree)}.")
+    #
+    #     return self.encode_terminals_tokenizers(tree)
+
+    def encode_text(self, text: list[str]) -> list[list[str]]:
+        if isinstance(text, str):
+            raise ValueError
+
+        encoding = self.model.encode(text, is_pretokenized=True)
+        tokens = []
+        for token in encoding.tokens:
+            if not token.startswith("@@"):
+                tokens.append([token])
+            else:
+                tokens[-1].append(token)
+
+        return tokens
+
+    def decode_text(self, text: Union[str, list[str]]) -> str:
+        if isinstance(text, str):
+            if text[:2] == "@@":
+                return text[2:]
+            else:
+                return text
+
+        return "".join(self.decode_text(token) for token in text)
+
+    def encode_terminals_tokenizers( self, tree: TensorTree) -> TensorTree:
+        """
+        Splits all terminals at once in a sequence of tokens and parents in O(n).
+
+        encoder is a function that takes a list of strings (i.e. terminal symbols) and
+            returns a list of list of strings (one list of subwords for each word)
+
+        parent_tokens = np.array(parent_tokens)
+
+        new_parents = np.empty(len(code_tokens), dtype=np.int)
+        new_parents[:len(parent_tokens)] = parent_tokens
+
+        insert_next = False
+        for i, token in enumerate(code_tokens):
+            if insert_next:
+                new_parents[new_parents >= (i - 1)] += 1
+                new_parents[i + 1:] = new_parents[i:-1]  # shift right
+                new_parents[i] = i - 1
+
+            insert_next = token.endswith(self.bpe_seperator)
+
+        new_parents += (self.padding_idx + 1)  # let it start at padding_idx FIXME do we really have to do this here
+
+        return tuple(new_parents)
+        """
+
+        # encode all words at once, might save some time with sentencepiece
+        # leaf_indices = tree.leaf_indices()
+        # leaves = [tree.get_node_data(leaf_idx) for leaf_idx in leaf_indices]
+
+        # actually encode the tokens
+        # encoded_tokens: list[list[str]] = encoder(list(leaves))
+
+        node_encoding = self.model.encode(tree.node_data, is_pretokenized=True)
+        print(node_encoding)
+        print(node_encoding.tokens)
+        print(node_encoding.attention_mask)
+
+        # additionally allocate space for 1 nonterminal for every splitted word (<[BPE]>)
+        # note this may be to much (as unsplitted words will not have the additional nonterminal).
+        # we will truncate the parents array at the end
+        approx_final_nodes = 2 * len(node_encoding)
+
+        # init output arrays
+        node_ids, tokens = [], []
+
+        new_parents = np.zeros((approx_final_nodes,), dtype=np.int32)
+        new_descendants = np.zeros((approx_final_nodes,), dtype=np.int32)
+
+        # copy old parents
+        new_parents[:len(tree)] = tree.parents.numpy()
+        new_descendants[:len(tree)] = tree.descendants.numpy()
+
+        for i, token in enumerate(tree.node_data):
+            new_idx = len(tokens)
+
+            if tree.is_leaf(i):
+                subtokens = encoded_tokens.pop(0)
+
+                # use original token if BPE returns nothing (for spaces)
+                if not subtokens:
+                    subtokens = [tree.get_node_data(i)]
+
+                num_new_nodes = len(subtokens) - 1  # one token is already part of the tree
+
+                # add the nonterminal only if we actually splitted the node
+                if num_new_nodes > 0:
+                    subtokens = [BPE_NONTERMINAL] + subtokens
+                    num_new_nodes += 1
+
+                new_tokens += subtokens
+                if num_new_nodes > 0:
+                    # shift all parents except the one of the token thats already part of the tree
+                    new_parents[new_idx + num_new_nodes + 1:] = new_parents[new_idx + 1:-num_new_nodes]
+
+                    # and adjust parent pointers to nodes defined after this node
+                    new_parents[new_parents > new_idx] += num_new_nodes
+
+                    # each subtoken has its predecessor as parent (so just use the appropriate range)
+                    new_token_parents = new_idx  # np.arange(new_idx, new_idx + num_new_nodes)
+                    new_parents[new_idx + 1: new_idx + num_new_nodes + 1] = new_token_parents
+            else:
+                # otherwise do nothing. parent is already copied
+                new_tokens.append(token)
+
+        new_parents = new_parents[:len(new_tokens)]
+        return tensortree.tree(node_data=new_tokens, parents=new_parents)
+
+    @classmethod
+    def train(cls, data_generator: Generator[str, None, Counter], save_file: Path, vocab_size: int, min_frequency: int):
+
+        import tokenizers
+        from tokenizers import normalizers
+        from tokenizers import Tokenizer
+        from tokenizers.models import BPE, WordPiece, Unigram
+        from tokenizers.trainers import BpeTrainer, WordPieceTrainer, UnigramTrainer
+
+        tokenizer = Tokenizer(WordPiece(unk_token="[UNK]", continuing_subword_prefix="@@"))
+
+        # tokenizer.pre_tokenizer = Whitespace()
+        # tokenizer.normalizer = normalizers.NFKC()
+
+        trainer = WordPieceTrainer(
+            special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", BPE_NONTERMINAL],
+            vocab_size=vocab_size,
+            min_frequency=min_frequency,
+            continuing_subword_prefix="@@"
+        )
+
+        ################### save counted nonterminals #########################
+        nonterminals: Optional[Counter] = None
+
+        def handle_return(generator, func):
+            returned = yield from generator
+            func(returned)
+
+        def save_nonterminals(return_value):
+            nonlocal nonterminals
+            nonterminals = return_value
+
+        ######################################################################
+
+        gen = handle_return(
+            generator=data_generator,
+            func=save_nonterminals
+        )
+        tokenizer.train_from_iterator(gen, trainer)
+
+        if nonterminals is not None:
+            tokenizer.add_special_tokens(list(nonterminals.keys()))
+        else:
+            print("Nonterminals is None")
+
+        tokenizer.save(str(save_file.absolute()))
+
+        return cls(save_file)
 
 
 TreeBPE = SentencePieceBPE

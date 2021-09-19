@@ -1,6 +1,7 @@
 import logging
 from typing import Union, Optional, Iterable
 
+import shutil
 from tree_sitter import Language, Parser
 
 from tokenizecode import get_project_root
@@ -28,8 +29,15 @@ def download_grammar(language: str, directory: Path) -> Path:
     z.extractall(directory.absolute())
 
     path = directory / f"tree-sitter-{language}-master"
+    new_path = path.with_name(path.name.replace('-master', ''))
+
     assert path.exists(), "this directory should exist"
-    return path
+
+    shutil.move(
+        str(path.absolute()),
+        str(new_path.absolute()),
+    )
+    return new_path
 
 
 class TreeSitterParser:
@@ -47,16 +55,18 @@ class TreeSitterParser:
 
     def _setup_grammar(self, language: str):
 
+        self.libs_dir.mkdir(parents=True, exist_ok=True)
         downloaded_langs = {
-            d.name[12:-7]: d for d in self.libs_dir.iterdir()
-            if d.is_dir() and d.name.startswith('tree-sitter-') and d.name.endswith('-master')
+            d.name.replace('tree-sitter-', '').replace('-master', ''): d for d in self.libs_dir.iterdir()
+            if d.is_dir() if d.name.startswith('tree-sitter-')
         }
+        print(downloaded_langs)
         if language not in downloaded_langs:
             downloaded_langs[language] = download_grammar(language, self.libs_dir)
             self.build_path.unlink(missing_ok=True)
 
         Language.build_library(
-            str(self.build_path),
+            str(self.build_path.absolute()),
             [str(dir_.absolute()) for dir_ in downloaded_langs.values()]
         )
 
@@ -64,10 +74,15 @@ class TreeSitterParser:
             lang: Language(str(self.build_path.absolute()), lang)
             for lang in downloaded_langs
         }
-
+        print(self.LANGUAGES)
     def _set_language(self, language: str):
         if language not in self.LANGUAGES:
-            self._setup_grammar(language)
+            try:
+                self._setup_grammar(language)
+            except AttributeError as e:
+                # self.reset(reload_all=True)
+                self._setup_grammar(language)
+                # raise e
 
         self.parser.set_language(self.LANGUAGES[language])
         self.language = language
@@ -77,6 +92,7 @@ class TreeSitterParser:
             import shutil
             shutil.rmtree(self.libs_dir)
 
+        self.build_path.unlink(missing_ok=True)
         self.LANGUAGES = {}
 
     def parse(self, code: Union[str, bytes], language: str = None):
@@ -404,7 +420,7 @@ class SplitLinesTraversal(TreeTraversal):
             root.descendants += 1
 
 
-def to_tensortree(nodes: list[_Node]) -> TensorTree:
+def to_tensortree(nodes: list[_Node]) -> tuple[TensorTree, list[NodeSpan]]:
     # correct descendants value will be set after iteration (!)
     node_data, parents, descendants, positions = [], [], [], []
 
@@ -425,11 +441,15 @@ class CodeParser:
         self.parser = TreeSitterParser()
         self.traverse = traversal if traversal is not None else FullTraversal()
 
-    def parse(self, code: str = None, lang: str = "java", output_positions: bool = False) -> TensorTree:
+    def parse(self, code: str = None, lang: str = "java",
+              output_positions: bool = False, output_errors: bool = False) -> Union[TensorTree, tuple[TensorTree, int], tuple[TensorTree, list[NodeSpan]], tuple[TensorTree, list[NodeSpan], int]]:
         ts_tree = self.parser.parse(code, lang)
         nodes = list(self.traverse(code, ts_tree))
+        num_errors = self.traverse.errors
         tree, positions = to_tensortree(nodes)
-        return (tree, positions) if output_positions else tree
+
+        res = (tree, positions) if output_positions else tree
+        return (res, num_errors) if output_errors else res
 
     @staticmethod
     def unparse(tree: TensorTree) -> str:
