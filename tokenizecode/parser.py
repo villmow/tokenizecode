@@ -31,12 +31,13 @@ def download_grammar(language: str, directory: Path) -> Path:
     path = directory / f"tree-sitter-{language}-master"
     new_path = path.with_name(path.name.replace('-master', ''))
 
-    assert path.exists(), "this directory should exist"
 
     shutil.move(
         str(path.absolute()),
         str(new_path.absolute()),
     )
+    assert new_path.exists(), "this directory should exist"
+
     return new_path
 
 
@@ -60,10 +61,11 @@ class TreeSitterParser:
             d.name.replace('tree-sitter-', '').replace('-master', ''): d for d in self.libs_dir.iterdir()
             if d.is_dir() if d.name.startswith('tree-sitter-')
         }
-        print(downloaded_langs)
         if language not in downloaded_langs:
             downloaded_langs[language] = download_grammar(language, self.libs_dir)
             self.build_path.unlink(missing_ok=True)
+        import time
+        time.sleep(4)
 
         Language.build_library(
             str(self.build_path.absolute()),
@@ -74,7 +76,7 @@ class TreeSitterParser:
             lang: Language(str(self.build_path.absolute()), lang)
             for lang in downloaded_langs
         }
-        print(self.LANGUAGES)
+
     def _set_language(self, language: str):
         if language not in self.LANGUAGES:
             try:
