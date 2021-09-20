@@ -214,9 +214,9 @@ class FullTraversal(TreeTraversal):
 
         nodes = list(self.traverse_tree(code, tree))
 
-        if self.errors:
-            import warnings
-            warnings.warn(f"Found {self.errors} errors while parsing. Is the parser set to the correct language?")
+        # if self.errors:
+        #     import warnings
+        #     warnings.warn(f"Found {self.errors} errors while parsing. Is the parser set to the correct language?")
 
         return nodes
 
