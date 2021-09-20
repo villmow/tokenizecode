@@ -1,5 +1,7 @@
 import logging
+import time
 from typing import Union, Optional, Iterable
+import warnings
 
 import shutil
 from tree_sitter import Language, Parser
@@ -31,7 +33,6 @@ def download_grammar(language: str, directory: Path) -> Path:
     path = directory / f"tree-sitter-{language}-master"
     new_path = path.with_name(path.name.replace('-master', ''))
 
-
     shutil.move(
         str(path.absolute()),
         str(new_path.absolute()),
@@ -43,48 +44,81 @@ def download_grammar(language: str, directory: Path) -> Path:
 
 class TreeSitterParser:
     """ A treesitter code parser that magically downloads and initializes itself"""
-
-    LANGUAGES: dict[str, Language] = {}
+    supported_languages: set[str] = {
+        'c', 'cpp', 'css', 'c-sharp', 'haskell', 'html', 'go',
+        'java', 'javascript', 'json', 'julia', 'ocaml', 'php', 'python',
+        'ruby', 'rust', 'scala', 'typescript',
+        # 'agda', 'swift', 'verilog' currently bugged. see: https://github.com/tree-sitter/py-tree-sitter/issues/72
+    }
 
     def __init__(self, libs_dir: Optional[Path] = None):
         if libs_dir is None:
             self.libs_dir = get_project_root() / 'libs'
 
         self.build_path = (self.libs_dir / 'langs.so').absolute()
-        self.parser = Parser()
-        self.language = None
 
-    def _setup_grammar(self, language: str):
+
+        self.language = None
+        self.LANGUAGES: dict[str, Language] = {}
+
+        self._setup_grammars()
+        self.parser = Parser()
+
+    def _setup_grammars(self):
+        # build already. call reset
+        if self.LANGUAGES:
+            return
 
         self.libs_dir.mkdir(parents=True, exist_ok=True)
+
         downloaded_langs = {
             d.name.replace('tree-sitter-', '').replace('-master', ''): d for d in self.libs_dir.iterdir()
             if d.is_dir() if d.name.startswith('tree-sitter-')
         }
-        if language not in downloaded_langs:
+
+        did_download = False
+        for language in (l for l in self.supported_languages if l not in downloaded_langs):
             downloaded_langs[language] = download_grammar(language, self.libs_dir)
+            did_download = True
+
+        # wait a little after downloading
+        if did_download:
             self.build_path.unlink(missing_ok=True)
-        import time
-        time.sleep(4)
+            time.sleep(1)
 
-        Language.build_library(
-            str(self.build_path.absolute()),
-            [str(dir_.absolute()) for dir_ in downloaded_langs.values()]
-        )
+        build_path = str(self.build_path.absolute())
+        language_directories = []
 
-        self.LANGUAGES = {
-            lang: Language(str(self.build_path.absolute()), lang)
-            for lang in downloaded_langs
-        }
+        for lang, dir_ in downloaded_langs.items():
+            src_dir = dir_ / "src"
+            if src_dir.exists():
+                language_directories.append(str(dir_.absolute()))
+                continue
+
+            src_dir = dir_ / lang / "src"
+            if src_dir.exists():
+                language_directories.append(str(src_dir.parent.absolute()))
+                continue
+            else:
+                warnings.warn(f"No 'src' folder found for language under {dir_}")
+                self.supported_languages.remove(lang)
+
+        did_build = Language.build_library(build_path, language_directories)
+
+        if did_build:
+            time.sleep(1)
+
+        self.LANGUAGES = {}
+        for lang in downloaded_langs:
+            try:
+                ts_language = Language(build_path, lang.replace('-', '_'))
+                self.LANGUAGES[lang] = ts_language
+            except AttributeError as e:
+                print(e)
 
     def _set_language(self, language: str):
-        if language not in self.LANGUAGES:
-            try:
-                self._setup_grammar(language)
-            except AttributeError as e:
-                # self.reset(reload_all=True)
-                self._setup_grammar(language)
-                # raise e
+        if language not in self.supported_languages:
+            raise ValueError(f"No parser for language {language}")
 
         self.parser.set_language(self.LANGUAGES[language])
         self.language = language
@@ -94,8 +128,8 @@ class TreeSitterParser:
             import shutil
             shutil.rmtree(self.libs_dir)
 
-        self.build_path.unlink(missing_ok=True)
         self.LANGUAGES = {}
+        self._setup_grammars()
 
     def parse(self, code: Union[str, bytes], language: str = None):
         if self.language is None and language is None:
@@ -130,7 +164,7 @@ class Point:
         elif self.row == other.row and self.column < other.column:
             return True
 
-        return  False
+        return False
 
     def __le__(self, other):
         if not isinstance(other, Point):
@@ -163,9 +197,9 @@ class _Node:
     span: NodeSpan
 
 
-
 class TreeTraversal:
     """ Implement a call method, that takes code and a treesitter and produces an iterable of nodes."""
+
     def __init__(self):
         self.errors = 0  # number of errors in last traversal
 
@@ -191,23 +225,29 @@ class FullTraversal(TreeTraversal):
 
         reached_root = False
 
-        last_leaf: Optional[_Node] = None
-        last_leaf_checked = None
+        # last_leaf: Optional[_Node] = None
+        # last_leaf_checked = None
+
+        last_end_byte: int = None
+        last_end_point: Point = None
 
         node_id = -1
         open_nodes: list[_Node] = []
         root: Optional[_Node] = None
 
-        def text_between(node_start_byte):
-            nonlocal last_leaf_checked, last_leaf
+        def text_between(node_start_byte, node_start_point):
+            # nonlocal last_leaf_checked, last_leaf
+            nonlocal last_end_byte, last_end_point
 
-            if last_leaf is None:
+            if last_end_byte is None:
                 return
 
-            if last_leaf_checked is not last_leaf:
-                text = code[last_leaf.span.end_byte:node_start_byte]
-                last_leaf_checked = last_leaf
+            if last_end_byte < node_start_byte:
+                text = code[last_end_byte:node_start_byte]
+                last_end_byte = node_start_byte
+                last_end_point = node_start_point
                 return text
+
 
         def add_node(text, span):
             nonlocal node_id, root
@@ -216,7 +256,7 @@ class FullTraversal(TreeTraversal):
             if open_nodes:
                 parent_id = open_nodes[-1].id_
                 open_nodes[-1].descendants += 1
-            elif last_leaf:
+            elif last_end_byte:
                 # at the end
                 parent_id = 0  # root
             else:
@@ -233,7 +273,7 @@ class FullTraversal(TreeTraversal):
             return node
 
         def to_node(node, read_text: bool):
-            nonlocal last_leaf
+            nonlocal last_end_byte, last_end_point
 
             span = NodeSpan(start_byte=node.start_byte, end_byte=node.end_byte,
                             start_point=Point(*node.start_point), end_point=Point(*node.end_point))
@@ -241,16 +281,17 @@ class FullTraversal(TreeTraversal):
             node = add_node(text, span)
 
             if read_text:
-                last_leaf = node
+                last_end_byte = node.span.end_byte
+                last_end_point = node.span.end_point
 
             return node
 
         while not reached_root:
-            code_between = text_between(cursor.node.start_byte)
+            code_between = text_between(cursor.node.start_byte, cursor.node.start_point)
             if code_between:
                 code_span = NodeSpan(
-                    start_byte=last_leaf.span.end_byte, end_byte=cursor.node.start_byte,
-                    start_point=last_leaf.span.end_point, end_point=Point(*cursor.node.start_point)
+                    start_byte=last_end_byte, end_byte=cursor.node.start_byte,
+                    start_point=last_end_point, end_point=Point(*cursor.node.start_point)
                 )
                 yield add_node(code_between, code_span)
 
@@ -288,11 +329,11 @@ class FullTraversal(TreeTraversal):
                 if cursor.goto_next_sibling():
                     retracing = False
 
-        code_between = text_between(cursor.node.end_byte)
+        code_between = text_between(cursor.node.end_byte, cursor.node.end_point)
         if code_between:
             code_between_span = NodeSpan(
-                start_byte=last_leaf.span.end_byte, end_byte=cursor.node.end_byte,
-                start_point=last_leaf.span.end_point, end_point=Point(*cursor.node.end_point)
+                start_byte=last_end_byte, end_byte=cursor.node.end_byte,
+                start_point=last_end_point, end_point=Point(*cursor.node.end_point)
             )
             yield add_node(code_between, code_between_span)
             root.descendants += 1
@@ -439,12 +480,18 @@ class CodeParser:
     """
     Computes the full syntax tree with all tokens for a piece of code.
     """
+
     def __init__(self, traversal: Optional[TreeTraversal] = None):
         self.parser = TreeSitterParser()
         self.traverse = traversal if traversal is not None else FullTraversal()
 
+    @property
+    def supported_languages(self) -> set[str]:
+        return self.parser.supported_languages
+
     def parse(self, code: str = None, lang: str = "java",
-              output_positions: bool = False, output_errors: bool = False) -> Union[TensorTree, tuple[TensorTree, int], tuple[TensorTree, list[NodeSpan]], tuple[TensorTree, list[NodeSpan], int]]:
+              output_positions: bool = False, output_errors: bool = False) -> Union[
+        TensorTree, tuple[TensorTree, int], tuple[TensorTree, list[NodeSpan]], tuple[TensorTree, list[NodeSpan], int]]:
         ts_tree = self.parser.parse(code, lang)
         nodes = list(self.traverse(code, ts_tree))
         num_errors = self.traverse.errors
