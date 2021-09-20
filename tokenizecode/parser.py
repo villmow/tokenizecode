@@ -485,9 +485,9 @@ class CodeParser:
         self.parser = TreeSitterParser()
         self.traverse = traversal if traversal is not None else FullTraversal()
 
-    @property
-    def supported_languages(self) -> set[str]:
-        return self.parser.supported_languages
+    @staticmethod
+    def supported_languages() -> set[str]:
+        return TreeSitterParser.supported_languages
 
     def parse(self, code: str = None, lang: str = "java",
               output_positions: bool = False, output_errors: bool = False) -> Union[
