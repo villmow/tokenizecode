@@ -196,6 +196,10 @@ class _Node:
 
     span: NodeSpan
 
+    def __post_init__(self):
+        if isinstance(self.text, bytes):
+            self.text = self.text.decode('utf-8')
+
 
 class TreeTraversal:
     """ Implement a call method, that takes code and a treesitter and produces an iterable of nodes."""
@@ -221,6 +225,9 @@ class FullTraversal(TreeTraversal):
         return nodes
 
     def traverse_tree(self, code: str, tree: tree_sitter.Tree):
+        if isinstance(code, str):
+            code = code.encode('utf-8')
+
         cursor = tree.walk()
 
         reached_root = False
@@ -247,7 +254,6 @@ class FullTraversal(TreeTraversal):
                 last_end_byte = node_start_byte
                 last_end_point = node_start_point
                 return text
-
 
         def add_node(text, span):
             nonlocal node_id, root
@@ -353,6 +359,9 @@ class SplitLinesTraversal(TreeTraversal):
 
     @staticmethod
     def traverse_tree_and_splitlines(code: str, tree: tree_sitter.Tree):
+        if isinstance(code, str):
+            code = code.encode('utf-8')
+
         cursor = tree.walk()
 
         reached_root = False
