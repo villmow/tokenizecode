@@ -381,7 +381,7 @@ def detect_langs(filepath: Path) -> Optional[list[str]]:
     try:
         possible_langs = EXTENSION_MAP[extension]
     except KeyError:
-        log.info(f"{filepath} has unknown extension '{extension}'.")
+        log.debug(f"{filepath} has unknown extension '{extension}'.")
         return
 
     # just return the one we found
