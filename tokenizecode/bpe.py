@@ -4,6 +4,7 @@ from pathlib import Path
 
 from typing import Callable, Union, Optional, Dict, Generator
 
+import datasets
 import numpy as np
 
 from tensortree import TensorTree
@@ -365,6 +366,41 @@ class WordPieceBPE(BaseTreeBPE):
         tokenizer.save(str(save_file.absolute()))
 
         return cls(save_file)
+
+    @classmethod
+    def train_dataset(cls, dataset: datasets.Dataset, save_file: Path, vocab_size: int, min_frequency: int, shuffle: bool = True, max_samples: Optional[int] = None, seed: int = 42):
+        """ dataset should have columns tokens, parents, descendants """
+        if shuffle:
+            dataset = dataset.shuffle(seed)
+
+        def data_generator() -> Generator[str, None, Counter]:
+            """
+            A dataset with the columns ["tokens", "parents", "descendants"]
+
+            :param dataset: datasets.Dataset
+            :return:
+            """
+            nonterminals = {}
+
+            total = len(dataset) if max_samples is None else max_samples
+            for i, s in enumerate(tqdm(dataset, total=total, desc="at sample")):
+                if not s["descendants"]:
+                    yield from s["tokens"]
+                else:
+                    for token, num_descendants in zip(s["tokens"], s["descendants"]):
+                        if num_descendants == 0:
+                            yield token
+                        else:
+                            nonterminals[token] = nonterminals.get(token, 0) + 1
+
+                if max_samples is not None and i == max_samples:
+                    break
+
+            nonterminals = Counter(dict(sorted(nonterminals.items(), key=lambda item: item[1])))
+            return nonterminals
+        from tqdm import tqdm
+
+        return cls.train(data_generator(), save_file, vocab_size, min_frequency)
 
 
 TreeBPE = SentencePieceBPE

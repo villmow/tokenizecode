@@ -187,7 +187,7 @@ class NodeSpan:
 
 
 @dataclass
-class _Node:
+class TmpNode:
     """ Helper during parsing. """
     id_: int
     text: str
@@ -207,13 +207,13 @@ class TreeTraversal:
     def __init__(self):
         self.errors = 0  # number of errors in last traversal
 
-    def __call__(self, code: str, tree: tree_sitter.Tree) -> Iterable[_Node]:
+    def __call__(self, code: str, tree: tree_sitter.Tree) -> Iterable[TmpNode]:
         raise NotImplementedError
 
 
 class FullTraversal(TreeTraversal):
 
-    def __call__(self, code: str, tree: tree_sitter.Tree) -> Iterable[_Node]:
+    def __call__(self, code: str, tree: tree_sitter.Tree) -> Iterable[TmpNode]:
         self.errors = 0  # will be incremented in traverse
 
         nodes = list(self.traverse_tree(code, tree))
@@ -225,6 +225,8 @@ class FullTraversal(TreeTraversal):
         return nodes
 
     def traverse_tree(self, code: str, tree: tree_sitter.Tree):
+        """ Fuck, this code is a mess... but it magically works."""
+
         if isinstance(code, str):
             code = code.encode('utf-8')
 
@@ -232,15 +234,12 @@ class FullTraversal(TreeTraversal):
 
         reached_root = False
 
-        # last_leaf: Optional[_Node] = None
-        # last_leaf_checked = None
-
         last_end_byte: int = None
         last_end_point: Point = None
 
         node_id = -1
-        open_nodes: list[_Node] = []
-        root: Optional[_Node] = None
+        open_nodes: list[TmpNode] = []
+        root: Optional[TmpNode] = None
 
         def text_between(node_start_byte, node_start_point):
             # nonlocal last_leaf_checked, last_leaf
@@ -271,7 +270,7 @@ class FullTraversal(TreeTraversal):
             if text == "[ERROR]":
                 self.errors += 1
 
-            node = _Node(id_=node_id, text=text, parent_id=parent_id, descendants=0, span=span)
+            node = TmpNode(id_=node_id, text=text, parent_id=parent_id, descendants=0, span=span)
 
             if parent_id == -1:
                 root = node
@@ -346,7 +345,7 @@ class FullTraversal(TreeTraversal):
 
 
 class SplitLinesTraversal(TreeTraversal):
-    def __call__(self, code: str, tree: tree_sitter.Tree) -> Iterable[_Node]:
+    def __call__(self, code: str, tree: tree_sitter.Tree) -> Iterable[TmpNode]:
         self.errors = 0  # will be incremented in traverse
 
         nodes = list(self.traverse_tree_and_splitlines(code, tree))
@@ -359,120 +358,10 @@ class SplitLinesTraversal(TreeTraversal):
 
     @staticmethod
     def traverse_tree_and_splitlines(code: str, tree: tree_sitter.Tree):
-        if isinstance(code, str):
-            code = code.encode('utf-8')
-
-        cursor = tree.walk()
-
-        reached_root = False
-
-        last_leaf: Optional[_Node] = None
-        last_leaf_checked = None
-
-        node_id = -1
-        open_nodes: list[_Node] = []
-        root: Optional[_Node] = None
-
-        def text_between(node_start_byte):
-            nonlocal last_leaf_checked, last_leaf
-
-            if last_leaf is None:
-                return
-
-            if last_leaf_checked is not last_leaf:
-                text = code[last_leaf.span.end_byte:node_start_byte]
-                last_leaf_checked = last_leaf
-                return text
-
-        def add_node(text, span):
-            nonlocal node_id, root
-
-            node_id += 1
-            if open_nodes:
-                parent_id = open_nodes[-1].id_
-                open_nodes[-1].descendants += 1
-            elif last_leaf:
-                # at the end
-                parent_id = 0  # root
-            else:
-                parent_id = -1
-
-            node = _Node(id_=node_id, text=text, parent_id=parent_id, descendants=0, span=span)
-
-            if parent_id == -1:
-                root = node
-
-            return node
-
-        def to_node(node, read_text: bool):
-            nonlocal last_leaf
-
-            span = NodeSpan(start_byte=node.start_byte, end_byte=node.end_byte,
-                            start_point=Point(*node.start_point), end_point=Point(*node.end_point))
-            text = code[span.start_byte:span.end_byte] if read_text else f"[{node.type}]"
-            node = add_node(text, span)
-
-            if read_text:
-                last_leaf = node
-
-            return node
-
-        while not reached_root:
-            code_between = text_between(cursor.node.start_byte)
-
-            if code_between:
-                code_span = NodeSpan(
-                    start_byte=last_leaf.span.end_byte, end_byte=cursor.node.start_byte,
-                    start_point=last_leaf.span.end_point, end_point=Point(*cursor.node.start_point)
-                )
-
-                yield add_node(code_between, code_span)
-
-            if cursor.node.is_named and not cursor.node.children:
-                node = to_node(cursor.node, read_text=False)
-                open_nodes.append(node)
-                yield node
-
-            node = to_node(cursor.node, read_text=not bool(cursor.node.children))
-            yield node
-
-            if cursor.node.is_named and not cursor.node.children:
-                if len(open_nodes) > 1:
-                    open_nodes[-2].descendants += open_nodes[-1].descendants
-                open_nodes = open_nodes[:-1]
-
-            if cursor.goto_first_child():
-                open_nodes.append(node)
-                continue
-
-            if cursor.goto_next_sibling():
-                continue
-
-            retracing = True
-            while retracing:
-                if not cursor.goto_parent():
-                    retracing = False
-                    reached_root = True
-                else:
-                    if len(open_nodes) > 1:
-                        open_nodes[-2].descendants += open_nodes[-1].descendants
-
-                    open_nodes = open_nodes[:-1]
-
-                if cursor.goto_next_sibling():
-                    retracing = False
-
-        code_between = text_between(cursor.node.end_byte)
-        if code_between:
-            code_between_span = NodeSpan(
-                start_byte=last_leaf.span.end_byte, end_byte=cursor.node.end_byte,
-                start_point=last_leaf.span.end_point, end_point=Point(*cursor.node.end_point)
-            )
-            yield add_node(code_between, code_between_span)
-            root.descendants += 1
+        raise NotImplementedError
 
 
-def to_tensortree(nodes: list[_Node]) -> tuple[TensorTree, list[NodeSpan]]:
+def to_tensortree(nodes: list[TmpNode]) -> tuple[TensorTree, list[NodeSpan]]:
     # correct descendants value will be set after iteration (!)
     node_data, parents, descendants, positions = [], [], [], []
 
