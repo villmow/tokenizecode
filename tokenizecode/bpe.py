@@ -6,10 +6,11 @@ from typing import Callable, Union, Optional, Dict, Generator
 
 import datasets
 import numpy as np
+from scipy.stats import stats
 
 from tensortree import TensorTree
 import tensortree
-
+from tokenizecode.utils import replace_whitespace
 
 log = logging.getLogger(__name__)
 
@@ -188,7 +189,7 @@ class SentencePieceBPE(BaseTreeBPE):
         return text.replace(' ', '').replace('\u2581', ' ').strip()
 
 
-class WordPieceBPE(BaseTreeBPE):
+class TokenizerBPE(BaseTreeBPE):
 
     def __init__(self, model: Union[str, Path]):
         super().__init__()
@@ -198,23 +199,20 @@ class WordPieceBPE(BaseTreeBPE):
         except ImportError:
             raise ImportError('Please install tokenizers with: pip install tokenizers')
 
-    # def encode(self, tree: TensorTree) -> TensorTree:
-    #     """
-    #     Main function. Applies BPE to all terminals in the linearized tree.
-    #     """
-    #     if not isinstance(tree, TensorTree):
-    #         raise ValueError(f"Can only encode a tensortree object and not {type(tree)}.")
-    #
-    #     return self.encode_terminals_tokenizers(tree)
-
     def encode_text(self, text: list[str]) -> list[list[str]]:
         if isinstance(text, str):
             raise ValueError
-
+        print(text)
         encoding = self.model.encode(text, is_pretokenized=True)
+
+        # wrap splitted words in a list
         tokens = []
-        for token in encoding.tokens:
-            if not token.startswith("@@"):
+        last_word_id = -1
+        for token, token_id, word_id in zip(encoding.tokens, encoding.ids, encoding.word_ids):
+            is_new_word = word_id != last_word_id
+            last_word_id = word_id
+
+            if is_new_word:
                 tokens.append([token])
             else:
                 tokens[-1].append(token)
@@ -230,31 +228,11 @@ class WordPieceBPE(BaseTreeBPE):
 
         return "".join(self.decode_text(token) for token in text)
 
-    def encode_terminals_tokenizers( self, tree: TensorTree) -> TensorTree:
+    def encode_terminals_tokenizers(self, tree: TensorTree) -> TensorTree:
         """
-        Splits all terminals at once in a sequence of tokens and parents in O(n).
-
-        encoder is a function that takes a list of strings (i.e. terminal symbols) and
-            returns a list of list of strings (one list of subwords for each word)
-
-        parent_tokens = np.array(parent_tokens)
-
-        new_parents = np.empty(len(code_tokens), dtype=np.int)
-        new_parents[:len(parent_tokens)] = parent_tokens
-
-        insert_next = False
-        for i, token in enumerate(code_tokens):
-            if insert_next:
-                new_parents[new_parents >= (i - 1)] += 1
-                new_parents[i + 1:] = new_parents[i:-1]  # shift right
-                new_parents[i] = i - 1
-
-            insert_next = token.endswith(self.bpe_seperator)
-
-        new_parents += (self.padding_idx + 1)  # let it start at padding_idx FIXME do we really have to do this here
-
-        return tuple(new_parents)
         """
+
+        raise NotImplementedError  # WIP
 
         # encode all words at once, might save some time with sentencepiece
         # leaf_indices = tree.leaf_indices()
@@ -319,8 +297,64 @@ class WordPieceBPE(BaseTreeBPE):
         return tensortree.tree(node_data=new_tokens, parents=new_parents)
 
     @classmethod
-    def train(cls, data_generator: Generator[str, None, Counter], save_file: Path, vocab_size: int, min_frequency: int):
+    def train_dataset(cls, dataset: datasets.Dataset, save_file: Path, vocab_size: int,
+                      shuffle: bool = True, max_samples: Optional[int] = None, seed: int = 42,
+                      **kwargs):
+        """ dataset should have columns tokens, parents, descendants """
+        if shuffle:
+            dataset = dataset.shuffle(seed)
 
+        def data_generator() -> Generator[str, None, Counter]:
+            """
+            A dataset with the columns ["tokens", "parents", "descendants"]
+
+            :param dataset: datasets.Dataset
+            :return:
+            """
+            from tqdm import tqdm
+
+            nonterminals = {}
+
+            total = len(dataset) if max_samples is None else max_samples
+            stats = {}
+            with tqdm(total=total, desc="at sample") as progress:
+                for i, s in enumerate(dataset):
+                    lang = s["language"]
+                    stats[lang] = stats.get(lang, 0) + 1
+
+                    if not s["descendants"]:
+                        yield from (replace_whitespace(token) for token in s["tokens"])
+                    else:
+                        for token, num_descendants in zip(s["tokens"], s["descendants"]):
+                            if num_descendants == 0:
+                                yield token
+                            else:
+                                nonterminals[token] = nonterminals.get(token, 0) + 1
+
+                    if max_samples is not None and i == max_samples:
+                        break
+
+                    progress.update()
+                    progress.set_postfix(stats)
+
+            log.info("Build dataset on the following files:")
+            for lang, count in stats.items():
+                log.info(f"{lang}: {count} files")
+
+            nonterminals = Counter(dict(sorted(nonterminals.items(), key=lambda item: item[1])))
+            return nonterminals
+
+        return cls.train(data_generator(), save_file, vocab_size, **kwargs)
+
+    @classmethod
+    def train(cls, data_generator: Generator[str, None, Counter], save_file: Path, vocab_size: int, min_frequency: int, **kwargs):
+        raise NotImplementedError
+
+
+class WordPieceBPE(TokenizerBPE):
+
+    @classmethod
+    def train(cls, data_generator: Generator[str, None, Counter], save_file: Path, vocab_size: int, min_frequency: int, **kwargs):
         import tokenizers
         from tokenizers import normalizers
         from tokenizers import Tokenizer
@@ -357,7 +391,55 @@ class WordPieceBPE(BaseTreeBPE):
             func=save_nonterminals
         )
         tokenizer.train_from_iterator(gen, trainer)
+        log.info(nonterminals)
+        if nonterminals is not None:
+            tokenizer.add_special_tokens(list(nonterminals.keys()))
+        else:
+            log.warning("Nonterminals is None")
 
+        tokenizer.save(str(save_file.absolute()))
+
+        return cls(save_file)
+
+
+class BytePairBPE(TokenizerBPE):
+
+    @classmethod
+    def train(cls, data_generator: Generator[str, None, Counter], save_file: Path, vocab_size: int, **kwargs):
+        from tokenizers import Tokenizer, models, pre_tokenizers, decoders, trainers
+
+        tokenizer = Tokenizer(models.BPE())
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
+        tokenizer.decoder = decoders.ByteLevel()
+
+        trainer = trainers.BpeTrainer(
+            special_tokens=[
+                "[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", BPE_NONTERMINAL,
+                "↵", "↹", "↦", "⏎⏎", "⏎", "········", "····", "··", "·",
+            ],
+            initial_alphabet=pre_tokenizers.ByteLevel.alphabet(),
+            vocab_size=vocab_size,
+        )
+
+        ################### save counted nonterminals #########################
+        nonterminals: Optional[Counter] = None
+
+        def handle_return(generator, func):
+            returned = yield from generator
+            func(returned)
+
+        def save_nonterminals(return_value):
+            nonlocal nonterminals
+            nonterminals = return_value
+
+        ######################################################################
+
+        gen = handle_return(
+            generator=data_generator,
+            func=save_nonterminals
+        )
+        tokenizer.train_from_iterator(gen, trainer)
+        print(nonterminals)
         if nonterminals is not None:
             tokenizer.add_special_tokens(list(nonterminals.keys()))
         else:
@@ -366,41 +448,5 @@ class WordPieceBPE(BaseTreeBPE):
         tokenizer.save(str(save_file.absolute()))
 
         return cls(save_file)
-
-    @classmethod
-    def train_dataset(cls, dataset: datasets.Dataset, save_file: Path, vocab_size: int, min_frequency: int, shuffle: bool = True, max_samples: Optional[int] = None, seed: int = 42):
-        """ dataset should have columns tokens, parents, descendants """
-        if shuffle:
-            dataset = dataset.shuffle(seed)
-
-        def data_generator() -> Generator[str, None, Counter]:
-            """
-            A dataset with the columns ["tokens", "parents", "descendants"]
-
-            :param dataset: datasets.Dataset
-            :return:
-            """
-            nonterminals = {}
-
-            total = len(dataset) if max_samples is None else max_samples
-            for i, s in enumerate(tqdm(dataset, total=total, desc="at sample")):
-                if not s["descendants"]:
-                    yield from s["tokens"]
-                else:
-                    for token, num_descendants in zip(s["tokens"], s["descendants"]):
-                        if num_descendants == 0:
-                            yield token
-                        else:
-                            nonterminals[token] = nonterminals.get(token, 0) + 1
-
-                if max_samples is not None and i == max_samples:
-                    break
-
-            nonterminals = Counter(dict(sorted(nonterminals.items(), key=lambda item: item[1])))
-            return nonterminals
-        from tqdm import tqdm
-
-        return cls.train(data_generator(), save_file, vocab_size, min_frequency)
-
 
 TreeBPE = SentencePieceBPE
