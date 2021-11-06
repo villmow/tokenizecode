@@ -16,7 +16,6 @@ import tree_sitter
 
 from tensortree import TensorTree
 import tensortree
-from tokenizecode.utils import replace_whitespace, restore_whitespace
 
 log = logging.getLogger(__name__)
 
@@ -366,7 +365,8 @@ def to_tensortree(nodes: list[TmpNode]) -> tuple[TensorTree, list[NodeSpan]]:
     node_data, parents, descendants, positions = [], [], [], []
 
     for node in nodes:
-        node_data.append(replace_whitespace(node.text))
+        # node_data.append(replace_whitespace(node.text))
+        node_data.append(node.text)
         parents.append(node.parent_id)
         descendants.append(node.descendants)
         positions.append(node.span)
@@ -400,7 +400,7 @@ class CodeParser:
 
     @staticmethod
     def unparse(tree: TensorTree) -> str:
-        return "".join(restore_whitespace(tree.get_node_data(i)) for i in tree.leaf_indices())
+        return "".join(tree.leaves())
 
     def pprint(self, tree: TensorTree) -> None:
         print(self.unparse(tree))

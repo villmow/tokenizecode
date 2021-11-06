@@ -17,57 +17,6 @@ def get_project_root() -> Path:
     return Path(__file__).parent.parent
 
 
-whitespace_replacemap = {
-    " ": "·",
-    "\t": "↹",
-    "\v": "↦",
-    "\n": "⏎",
-    "\r": "↵",
-}
-whitespace_restoremap = {v: k for k, v in whitespace_replacemap.items()}
-
-
-RE_REPLACE_WHITESPACE = re.compile(
-    '|'.join(
-        sorted(
-            re.escape(k) for k in whitespace_replacemap
-        )
-    )
-)
-RE_RESTORE_WHITESPACE = re.compile(
-    '|'.join(
-        sorted(
-            re.escape(k) for k in whitespace_restoremap
-        )
-    )
-)
-
-
-def replace_whitespace(text: Union[str, list[str]], replace_map: dict[str, str] = None):
-    """
-    Replaces tabs, newlines and spaces with unicode symbols
-    """
-
-    def _replace(string: str) -> str:
-        return RE_REPLACE_WHITESPACE.sub(
-            lambda m: whitespace_replacemap[m.group()],
-            string
-        )
-
-    if isinstance(text, (list, tuple)):
-        res = [_replace(string) for string in text]
-        return text.__class__(res)
-
-    return _replace(text)
-
-
-def restore_whitespace(text: str) -> str:
-    return  RE_RESTORE_WHITESPACE.sub(
-            lambda m: whitespace_restoremap[m.group()],
-            text
-        )
-
-
 def smart_read_file(filepath: Union[str, Path]) -> str:
     """
     Tries to determine the encoding of the file and open it accordingly.
@@ -96,3 +45,15 @@ def smart_read_file(filepath: Union[str, Path]) -> str:
         content = _read_file(filepath, encoding=None)
 
     return content
+
+
+from tensortree import TensorTree
+
+
+def is_tree_of_strings(tree: TensorTree) -> bool:
+    return isinstance(tree.node_data[0], str)
+
+
+TensorTreeWithStrings = TensorTree  # with only strings as nodes
+TensorTreeWithInts = TensorTree  # with ints (ids) as nodes
+
