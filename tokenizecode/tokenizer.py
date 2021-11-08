@@ -8,32 +8,21 @@ from tensortree import TensorTree
 
 from tokenizecode.bpe import TokenizerBPE
 from tokenizecode.parser import CodeParser
-from tokenizecode.utils import TensorTreeWithStrings, TensorTreeWithInts, is_tree_of_strings
+from tokenizecode.utils import TensorTreeWithStrings, TensorTreeWithInts, is_tree_of_strings, get_project_root
+
+
+DEFAULT_TOKENIZER_BPE = get_project_root() / "trained_tokenizers/20211108_bpe20k-fpl40k.json"
 
 
 class CodeTokenizer:
     """ Combines tokenizer and bpe. """
 
-    def __init__(self, tokenizer: TokenizerBPE, parser: Optional[CodeParser] = None):
+    def __init__(self, tokenizer: Optional[TokenizerBPE] = None, parser: Optional[CodeParser] = None):
+        if tokenizer is None:
+            tokenizer = TokenizerBPE(DEFAULT_TOKENIZER_BPE)
+
         self.tokenizer = tokenizer
         self.parser = parser if parser is not None else CodeParser()
-
-    @classmethod
-    def from_file(cls, bpe_file: str):
-        from tokenizecode.bpe import TokenizerBPE
-        return cls(TokenizerBPE(bpe_file))
-
-    def parse(self, code: str, lang: str) -> TensorTreeWithStrings:
-        """ Turns a piece code into a syntax tree. """
-        return self.parser.parse(code, lang)
-
-    @staticmethod
-    def unparse(tree: TensorTreeWithStrings) -> str:
-        """ Turns a syntax_tree tree back into code. """
-        if not is_tree_of_strings(tree):
-            raise ValueError("Tree should consist of strings.")
-
-        return CodeParser.unparse(tree)
 
     def _inputs_to_tree(self, inputs: Union[str, TensorTreeWithStrings], lang: Optional[str] = None) -> TensorTreeWithStrings:
         """ Either parses a piece of code or uses the tree."""
@@ -52,6 +41,23 @@ class CodeTokenizer:
 
         return tree
 
+    @classmethod
+    def from_file(cls, bpe_file: str):
+        from tokenizecode.bpe import TokenizerBPE
+        return cls(TokenizerBPE(bpe_file))
+
+    def parse(self, code: str, lang: str) -> TensorTreeWithStrings:
+        """ Turns a piece code into a syntax tree. """
+        return self.parser.parse(code, lang)
+
+    @staticmethod
+    def unparse(tree: TensorTreeWithStrings) -> str:
+        """ Turns a syntax_tree tree back into code. """
+        if not is_tree_of_strings(tree):
+            raise ValueError("Tree should consist of strings.")
+
+        return CodeParser.unparse(tree)
+
     def encode(self, inputs: Union[str, TensorTreeWithStrings], lang: Optional[str] = None) -> tokenizers.Encoding:
         """ Encodes a piece of code or a syntax tree and returns an encoding for all tokens."""
         tree = self._inputs_to_tree(inputs, lang)
@@ -61,10 +67,10 @@ class CodeTokenizer:
         """ Encodes any piece of text or list of text. """
         return self.tokenizer.encode_text(text)
 
-    def encode_tree(
+    def encode_to_tree(
             self, inputs: Union[str, TensorTreeWithStrings], lang: Optional[str] = None
     ) -> TensorTreeWithInts:
-        """ Encodes a piece of code or a syntax tree and returns the full syntax tree encoded (ie only ids as nodes)."""
+        """ Encodes a piece of code or a syntax tree and returns **the full syntax tree** encoded (ie only ids as nodes)."""
 
         tree = self._inputs_to_tree(inputs, lang)
         return self.tokenizer.encode_tree(tree)
@@ -79,32 +85,32 @@ class CodeTokenizer:
         """ Returns a tree with strings as node data. keep_bpe keeps artificial BPE nodes. """
         return self.tokenizer.decode_tree(tree, keep_bpe)
 
-    def detokenize(self,
-                   tree: Optional[Union[TensorTree, list[TensorTree]]] = None,
-                   text: Optional[Union[str, list[str], list[list[str]]]] = None) -> Union[str, list[str]]:
-        if tree is not None:
-            return self.detokenize_tree(tree)
-        elif text is not None:
-            return self.detokenize_text(text)
-        else:
-            raise ValueError("Either tree or text must be set.")
-
-    def detokenize_tree(self, tree: Union[TensorTree, list[TensorTree]]) -> Union[str, list[str]]:
-        if isinstance(tree, list):
-            return [self.detokenize_tree(t) for t in tree]
-
-        tree = self.tokenizer.decode(tree)
-        code = self.parser.unparse(tree)
-        return code
-
-    def detokenize_text(self, text: Union[list[str], list[list[str]]]) -> Union[str, list[str]]:
-        if not text:
-            return ""
-        if isinstance(text[0], list):
-            return [self.detokenize_text(t) for t in text]
-
-        text = self.tokenizer.decode_text(text)
-        return text
+    # def detokenize(self,
+    #                tree: Optional[Union[TensorTree, list[TensorTree]]] = None,
+    #                text: Optional[Union[str, list[str], list[list[str]]]] = None) -> Union[str, list[str]]:
+    #     if tree is not None:
+    #         return self.detokenize_tree(tree)
+    #     elif text is not None:
+    #         return self.detokenize_text(text)
+    #     else:
+    #         raise ValueError("Either tree or text must be set.")
+    #
+    # def detokenize_tree(self, tree: Union[TensorTree, list[TensorTree]]) -> Union[str, list[str]]:
+    #     if isinstance(tree, list):
+    #         return [self.detokenize_tree(t) for t in tree]
+    #
+    #     tree = self.tokenizer.decode(tree)
+    #     code = self.parser.unparse(tree)
+    #     return code
+    #
+    # def detokenize_text(self, text: Union[list[str], list[list[str]]]) -> Union[str, list[str]]:
+    #     if not text:
+    #         return ""
+    #     if isinstance(text[0], list):
+    #         return [self.detokenize_text(t) for t in text]
+    #
+    #     text = self.tokenizer.decode_text(text)
+    #     return text
 
     @staticmethod
     def tree_to_tokens(tree: TensorTree) -> Union[torch.Tensor, list[str]]:

@@ -15,8 +15,7 @@ from tokenizecode.utils import TensorTreeWithStrings, TensorTreeWithInts, is_tre
 try:
     import tokenizers
 except ImportError:
-    raise ImportError('Please install tokenizers with: pip install tokenizers')
-
+    raise ImportError('Please install tokenizers with: `pip install tokenizers`')
 
 log = logging.getLogger(__name__)
 
@@ -152,35 +151,7 @@ def decode_terminals(
     return tensortree.tree(node_data=new_tokens, parents=new_parents)
 
 
-class BaseTreeBPE:
-
-    def encode_text(self, text: Union[str, list[str]]) -> Union[list[str], list[list[str]]]:
-        raise NotImplementedError()
-
-    def decode_text(self, text: Union[str, list[str]]) -> str:
-        raise NotImplementedError()
-
-    def encode(self, tree: TensorTree) -> TensorTree:
-        """
-        Main function. Applies BPE to all terminals in the linearized tree.
-        """
-        if not isinstance(tree, TensorTree):
-            raise ValueError(f"Can only encode a tensortree object and not {type(tree)}.")
-
-        return encode_terminals(
-            tree, encoder=self.encode_text
-        )
-
-    def decode(self, tree: TensorTree) -> TensorTree:
-        if not isinstance(tree, TensorTree):
-            raise ValueError("Can only encode a tensortree object.")
-
-        return decode_terminals(
-            tree, decoder=self.decode_text
-        )
-
-
-class SentencePieceBPE(BaseTreeBPE):
+class SentencePieceBPE:
 
     def __init__(self, model: Union[str, Path]):
         super().__init__()
@@ -189,6 +160,25 @@ class SentencePieceBPE(BaseTreeBPE):
             self.sp = spm.SentencePieceProcessor(model_file=model)
         except ImportError:
             raise ImportError('Please install sentencepiece with: pip install sentencepiece')
+
+    def encode(self, tree: TensorTreeWithStrings) -> TensorTreeWithStrings:
+        """
+        Main function. Applies BPE to all terminals in the linearized tree.
+        """
+        if not isinstance(tree, TensorTree):
+            raise ValueError(f"Can only encode a tensortree object with strings and not {type(tree)}.")
+
+        return encode_terminals(
+            tree, encoder=self.encode_text
+        )
+
+    def decode(self, tree: TensorTreeWithStrings) -> TensorTreeWithStrings:
+        if not isinstance(tree, TensorTree):
+            raise ValueError("Can only encode a tensortree object with strings .")
+
+        return decode_terminals(
+            tree, decoder=self.decode_text
+        )
 
     def encode_text(self, text: Union[str, list[str]]) -> Union[list[str], list[list[str]]]:
         return self.sp.encode(text, out_type=str)
@@ -201,6 +191,7 @@ class SentencePieceBPE(BaseTreeBPE):
 
 
 class TokenizerBPE:
+    """ Add new BPE implementations by subclassing TokenizerBPE and implement `train()`"""
 
     def __init__(self, model: Union[str, Path]):
         super().__init__()
@@ -216,15 +207,10 @@ class TokenizerBPE:
         return encoding
 
     def decode_text(self, ids) -> str:
-        print(ids)
-        print([self.model.id_to_token(i) for i in ids])
         out = self.model.decode(ids, skip_special_tokens=False)
-        print(out)
-        print("-" * 100)
-        # out = restore_whitespace(out)
         return out
 
-    def encode_tree(self, tree: TensorTree) -> TensorTree:
+    def encode_tree(self, tree: TensorTreeWithStrings) -> TensorTreeWithInts:
         """ Produces a tree with IDs and artificial BPE nodes. """
         assert isinstance(tree.node_data[0], str), "tree should consist of strings"
         import torch
@@ -341,7 +327,7 @@ class TokenizerBPE:
         # assert torch.equal(tree.descendants, new_descendants), " new_descendants should be equal"
         return tree
 
-    def decode_tree(self, tree, keep_bpe: bool = False) -> TensorTree:
+    def decode_tree(self, tree: TensorTreeWithInts, keep_bpe: bool = False) -> TensorTreeWithStrings:
         """ Returns a tree with strings as node data. keep_bpe keeps artificial BPE nodes. """
 
         import tensortree
@@ -361,12 +347,8 @@ class TokenizerBPE:
         return decode_terminals(tree_with_strings, decoder=lambda list_of_str: "".join(list_of_str))
 
     @classmethod
-    def train_dataset(cls, dataset: datasets.Dataset, save_file: Path, vocab_size: int,
-                      shuffle: bool = True, max_samples: Optional[int] = None, seed: int = 42,
-                      **kwargs):
+    def train_dataset(cls, dataset: datasets.Dataset, save_file: Path, vocab_size: int, **kwargs):
         """ dataset should have columns tokens, parents, descendants """
-        if shuffle:
-            dataset = dataset.shuffle(seed)
 
         def data_generator() -> Generator[str, None, Counter]:
             """
@@ -379,7 +361,7 @@ class TokenizerBPE:
 
             nonterminals = {}
 
-            total = len(dataset) if max_samples is None else max_samples
+            total = len(dataset)
             stats = {}
             with tqdm(total=total, desc="at sample") as progress:
                 for i, s in enumerate(dataset):
@@ -394,9 +376,6 @@ class TokenizerBPE:
                                 yield token
                             else:
                                 nonterminals[token] = nonterminals.get(token, 0) + 1
-
-                    if max_samples is not None and i == max_samples:
-                        break
 
                     progress.update()
                     progress.set_postfix(stats)
@@ -415,64 +394,12 @@ class TokenizerBPE:
         raise NotImplementedError
 
 
-class WordPieceBPE(TokenizerBPE):
-
-    @classmethod
-    def train(cls, data_generator: Generator[str, None, Counter], save_file: Path, vocab_size: int, min_frequency: int, **kwargs):
-        import tokenizers
-        from tokenizers import normalizers
-        from tokenizers import Tokenizer
-        from tokenizers.models import BPE, WordPiece, Unigram
-        from tokenizers.trainers import BpeTrainer, WordPieceTrainer, UnigramTrainer
-
-        tokenizer = Tokenizer(WordPiece(unk_token="[UNK]", continuing_subword_prefix="@@"))
-
-        # tokenizer.pre_tokenizer = Whitespace()
-        # tokenizer.normalizer = normalizers.NFKC()
-
-        trainer = WordPieceTrainer(
-            special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", BPE_NONTERMINAL],
-            vocab_size=vocab_size,
-            min_frequency=min_frequency,
-            continuing_subword_prefix="@@"
-        )
-
-        ################### save counted nonterminals #########################
-        nonterminals: Optional[Counter] = None
-
-        def handle_return(generator, func):
-            returned = yield from generator
-            func(returned)
-
-        def save_nonterminals(return_value):
-            nonlocal nonterminals
-            nonterminals = return_value
-
-        ######################################################################
-
-        gen = handle_return(
-            generator=data_generator,
-            func=save_nonterminals
-        )
-        tokenizer.train_from_iterator(gen, trainer)
-        log.info(nonterminals)
-        if nonterminals is not None:
-            tokenizer.add_special_tokens(list(nonterminals.keys()))
-        else:
-            log.warning("Nonterminals is None")
-
-        tokenizer.save(str(save_file.absolute()))
-
-        return cls(save_file)
-
-
 class BytePairBPE(TokenizerBPE):
 
     @staticmethod
     def specials():
         return [
                 "[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", BPE_NONTERMINAL,
-                # "↵", "↹", "↦", "⏎⏎", "⏎", "········", "····", "··", "·",
                 "\r", "\t", "\v", "\n\n", "\n", "        ", "    ", "  ", " ",
         ]
 
@@ -519,6 +446,3 @@ class BytePairBPE(TokenizerBPE):
         tokenizer.save(str(save_file.absolute()))
 
         return cls(save_file)
-
-
-TreeBPE = SentencePieceBPE

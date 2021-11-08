@@ -21,6 +21,29 @@ def to_tensortree_without_descendants(nodes: list) -> tensortree.TensorTree:
 
 class TestCodeParser(unittest.TestCase):
 
+    def assertTreeEqual(self, tree1: tensortree.TensorTree, tree2: tensortree.TensorTree, msg = ...) -> None:
+        import torch
+        self.assertListEqual(
+            tree1.descendants.tolist(),
+            tree2.descendants.tolist(),
+            msg
+        )
+        self.assertListEqual(
+            tree1.parents.tolist(),
+            tree2.parents.tolist(),
+            msg
+        )
+
+        n1 = tree1.node_data
+        n2 = tree2.node_data
+
+        if isinstance(n1, torch.Tensor):
+            n1 = n1.tolist()
+        if isinstance(n2, torch.Tensor):
+            n2 = n1.tolist()
+
+        self.assertListEqual(n1, n2, msg)
+
     def parse(self, code: str, language: str) -> tensortree.TensorTree:
         parser = TreeSitterParser()
         traverse = FullTraversal()
@@ -67,20 +90,7 @@ class TestCodeParser(unittest.TestCase):
                 tree2 = self.parse_without_descendants(code, language)
                 tree1.pprint()
                 tree2.pprint()
-
-                self.assertListEqual(
-                    tree1.descendants.tolist(),
-                    tree2.descendants.tolist(),
-                )
-                self.assertListEqual(
-                    tree1.parents.tolist(),
-                    tree2.parents.tolist(),
-                )
-
-                self.assertListEqual(
-                    tree1.node_data,
-                    tree2.node_data
-                )
+                self.assertTreeEqual(tree1, tree2)
 
                 self.assertNotIn("[ERROR]", tree1.node_data)
 
@@ -90,21 +100,7 @@ class TestCodeParser(unittest.TestCase):
         tree2 = self.parse_without_descendants(ruby_code, "java")
         tree1.pprint()
         tree2.pprint()
-
-        self.assertListEqual(
-            tree1.descendants.tolist(),
-            tree2.descendants.tolist(),
-        )
-        self.assertListEqual(
-            tree1.parents.tolist(),
-            tree2.parents.tolist(),
-        )
-
-        self.assertListEqual(
-            tree1.node_data,
-            tree2.node_data
-        )
-
+        self.assertTreeEqual(tree1, tree2)
         self.assertIn("[ERROR]", tree1.node_data)
 
     def test_parsing_all(self):
