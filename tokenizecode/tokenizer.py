@@ -77,7 +77,9 @@ class CodeTokenizer:
 
     def decode(self, ids) -> str:
         if isinstance(ids, TensorTreeWithInts):
-            pass
+            tree = ids
+            decoded_tree = self.decode_tree(tree, keep_bpe=False)
+            return self.unparse(decoded_tree)
 
         return self.tokenizer.decode_text(ids)
 
