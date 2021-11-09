@@ -25,5 +25,5 @@ parser = CodeParser()
 # returns a tensortree
 tree = parser.parse(java_code, "java")
 
-tree.pprint()  
+tree.pprint()
 ```
