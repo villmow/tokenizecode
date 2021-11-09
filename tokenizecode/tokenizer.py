@@ -22,7 +22,14 @@ class CodeTokenizer:
             tokenizer = TokenizerBPE(DEFAULT_TOKENIZER_BPE)
 
         self.tokenizer = tokenizer
-        self.parser = parser if parser is not None else CodeParser()
+        self._parser = parser if parser is not None else None
+
+    @property
+    def parser(self):
+        if self._parser is None:
+            self._parser = CodeParser()
+
+        return self.parser
 
     def _inputs_to_tree(self, inputs: Union[str, TensorTreeWithStrings], lang: Optional[str] = None) -> TensorTreeWithStrings:
         """ Either parses a piece of code or uses the tree."""

@@ -198,12 +198,13 @@ class TokenizerBPE:
         self.model = tokenizers.Tokenizer.from_file(str(model))
         self.bpe_nonterminal_id = self.model.token_to_id(BPE_NONTERMINAL)
 
-    def encode_text(self, text: Union[str, list[str]]) -> tokenizers.Encoding:
-        # either string or list of strings
-        is_pretokenized = isinstance(text, list)
-        # text = replace_whitespace(text)  # we only do this in text mode, because the parser does this while building the tree
+    def encode_text(self, text: Union[str, list[str]], is_pretokenized: Optional[bool] = None) -> tokenizers.Encoding:
+        if is_pretokenized is None:
+            # either string or list of strings
+            is_pretokenized = isinstance(text, list)
 
         encoding = self.model.encode(text, is_pretokenized=is_pretokenized)
+
         return encoding
 
     def decode_text(self, ids) -> str:
