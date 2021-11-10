@@ -6,7 +6,7 @@ from typing import Callable, Union, Optional, Dict, Generator
 
 import datasets
 import numpy as np
-from scipy.stats import stats
+import torch
 
 from tensortree import TensorTree
 import tensortree
@@ -189,33 +189,34 @@ class SentencePieceBPE:
 
         return text.replace(' ', '').replace('\u2581', ' ').strip()
 
+import transformers
 
 class TokenizerBPE:
     """ Add new BPE implementations by subclassing TokenizerBPE and implement `train()`"""
 
-    def __init__(self, model: Union[str, Path]):
+    def __init__(self, tokenizer_file: Union[str, Path]):
         super().__init__()
-        self.model = tokenizers.Tokenizer.from_file(str(model))
-        self.bpe_nonterminal_id = self.model.token_to_id(BPE_NONTERMINAL)
 
-    def encode_text(self, text: Union[str, list[str]], is_pretokenized: Optional[bool] = None) -> tokenizers.Encoding:
+        self.tokenizer = transformers.PreTrainedTokenizerFast(tokenizer_file=str(tokenizer_file))
+        self.bpe_nonterminal_id = self.tokenizer.convert_tokens_to_ids(BPE_NONTERMINAL)
+
+    def encode_text(self, text: Union[str, list[str]], is_pretokenized: Optional[bool] = None) -> transformers.BatchEncoding:
         if is_pretokenized is None:
             # either string or list of strings
             is_pretokenized = isinstance(text, list)
 
-        encoding = self.model.encode(text, is_pretokenized=is_pretokenized)
+        encoding = self.tokenizer(text, is_split_into_words=is_pretokenized).encodings[0]
 
         return encoding
 
     def decode_text(self, ids) -> str:
-        out = self.model.decode(ids, skip_special_tokens=False)
+        out = self.tokenizer.decode(ids)
         return out
 
     def encode_tree(self, tree: TensorTreeWithStrings) -> TensorTreeWithInts:
         """ Produces a tree with IDs and artificial BPE nodes. """
         assert isinstance(tree.node_data[0], str), "tree should consist of strings"
-        import torch
-        encoded_nodes = self.model.encode(tree.node_data, is_pretokenized=True)
+        encoded_nodes = self.tokenizer(tree.node_data, is_split_into_words=True).encodings[0]
 
         # compute final amount of nodes
         approx_num_nodes = len(encoded_nodes.ids) * 2
@@ -230,10 +231,6 @@ class TokenizerBPE:
 
         new_descendants[:len(tree.descendants)] = tree.descendants.numpy()
         active = np.full_like(new_descendants, fill_value=False, dtype=bool)  # bool tensor with all false
-
-        # torch version
-        # new_descendants[:len(tree.descendants)] = tree.descendants
-        # active = torch.full_like(new_descendants, fill_value=False, dtype=torch.bool)  # bool tensor with all false
 
         idx_new_node = 0
         idx_encoded_node = 0
@@ -259,11 +256,44 @@ class TokenizerBPE:
             if not tree.is_leaf(old_node_idx):
                 # Nonterminals -> are encoded as special symbols and should have been never splitted by the tokenizer
 
+                if word_ids[idx_encoded_node] == word_ids[idx_encoded_node + 1]:
+                    log.error(f"Detected splitted nonterminal: {tree.get_node_data(old_node_idx)}")
+
+                    # splitted_nonterminals
+                    end_idx = idx_encoded_node + 1
+                    while word_ids[end_idx] == word_ids[end_idx + 1]:
+                        end_idx += 1
+                    end_idx += 1
+                    splitted_tokens = encoded_nodes.tokens[idx_encoded_node: end_idx]
+                    log.error(f"Nonterminal was split into: {splitted_tokens}. Will be set to [UNK].")
+
+                    _add_next_token(token=self.tokenizer.convert_tokens_to_ids("[UNK]"), parent_added=True)
+                    idx_encoded_node = end_idx
+                    continue
+
+                    # print("old_node_idx", old_node_idx)
+                    # print("idx_encoded_node", idx_encoded_node)
+                    # print("word_ids[idx_encoded_node - 1]", word_ids[idx_encoded_node - 1])
+                    # print("word_ids[idx_encoded_node]", word_ids[idx_encoded_node])
+                    # print("word_ids[idx_encoded_node + 1]", word_ids[idx_encoded_node + 1])
+                    # print("encoded_nodes.tokens[idx_encoded_node - 10: idx_encoded_node]", encoded_nodes.tokens[idx_encoded_node - 10: idx_encoded_node])
+                    # print("encoded_nodes.tokens[idx_encoded_node]", encoded_nodes.tokens[idx_encoded_node])
+                    # print("encoded_nodes.tokens[idx_encoded_node + 1]", encoded_nodes.tokens[idx_encoded_node + 1])
+                    # print("tree.get_node_data(old_node_idx - 1)", tree.get_node_data(old_node_idx -1))
+                    # print("tree.get_node_data(old_node_idx)", tree.get_node_data(old_node_idx))
+                    # print("tree.get_node_data(old_node_idx + 1)", tree.get_node_data(old_node_idx + 1))
+                    # print()
                 assert word_ids[idx_encoded_node] != word_ids[idx_encoded_node + 1], "nonterminals should not have been splitted"
+
                 _add_next_token()
+            elif not tree.get_node_data(old_node_idx):
+                # this is bad and should not happen.
+                log.warning("Empty node detected. Will delete empty node and restart.")
+                new_tree = tree.delete_node(old_node_idx)
+                return self.encode_tree(new_tree)
+
             # Leaf, which has been splitted
             elif (idx_encoded_node + 1) < len(word_ids) and (word_ids[idx_encoded_node] == word_ids[idx_encoded_node + 1]):
-
                 num_new_tokens_for_leaf = 0
                 idx_bpe_token = idx_new_node
 
@@ -321,11 +351,6 @@ class TokenizerBPE:
 
         tree = tensortree.tree(node_data=new_tokens, parents=new_parents, descendants=new_descendants)
 
-        # # FIXME load tree with new descendants
-        # tree = tensortree.tree(node_data=new_tokens, parents=new_parents)
-        # assert torch.equal(tree.descendants, torch.from_numpy(new_descendants)), " new_descendants should be equal"
-        # torch version
-        # assert torch.equal(tree.descendants, new_descendants), " new_descendants should be equal"
         return tree
 
     def decode_tree(self, tree: TensorTreeWithInts, keep_bpe: bool = False) -> TensorTreeWithStrings:
@@ -335,7 +360,7 @@ class TokenizerBPE:
         tree_with_strings = tensortree.tree(
             parents=tree.parents,
             descendants=tree.descendants,
-            node_data=[self.model.id_to_token(t) for t in tree.node_data]
+            node_data=self.tokenizer.convert_ids_to_tokens(tree.node_data)
         )
 
         if not keep_bpe:

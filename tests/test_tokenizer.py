@@ -7,6 +7,17 @@ from tokenizecode import CodeTokenizer, CodeParser, SplitLinesTraversal
 from codesamples import SAMPLE_CODE
 from tokenizecode.utils import TensorTreeWithStrings, TensorTreeWithInts, TensorTree
 
+import datasets
+
+
+DATASET = datasets.load_from_disk("assets/github_dataset_small")
+
+
+def get_sample_idx(repo, path):
+    for i, sample in enumerate(DATASET):
+        if sample["repository"] == repo and sample["path"] == path:
+            return i
+
 
 class TestTokenizer(unittest.TestCase):
 
@@ -53,12 +64,81 @@ class TestTokenizer(unittest.TestCase):
 
         language = "java"
         code = SAMPLE_CODE[language]
-
+        print("loaded tokenizer")
         code_encoding = tokenizer.encode(code, language)
-        print(code_encoding.tokens)
+        print(code_encoding)
         print(code_encoding.ids)
         code_decoded = tokenizer.decode(code_encoding.ids)
         self.assertSequenceEqual(code, code_decoded)
+
+    def test_encode_weird_sample(self) -> None:
+        from multicoder.utils import to_tree
+        sample = DATASET[36135]
+        tree = to_tree(sample)
+
+        # tokenizer = CodeTokenizer.from_file("/home/johannes/projects/tokenizecode/trained_tokenizers/20211108_bpe20k-fpl40k.json")
+        tokenizer = CodeTokenizer.from_file("/home/johannes/projects/multicoder/tokenizer/20211108_bpe30k-fpl40k-with-nonterminals.json")
+        # tokenizer = CodeTokenizer.from_file("/home/johannes/projects/multicoder/my_bpe_on_dataset4.json")
+        print(sample["repository"])
+        print(sample["path"])
+        code_encoding = tokenizer.encode_to_tree(tree)
+        tokenizer.decode_tree(code_encoding, keep_bpe=True).pprint()
+        # print(code_encoding)
+        # print(code_encoding.ids)
+        # code_decoded = tokenizer.decode(code_encoding.ids)
+        # self.assertSequenceEqual(code, code_decoded)
+
+    def test_encode_weird_sample2(self) -> None:
+        from multicoder.utils import to_tree
+        repo = "microsoft/vscode"
+        path = "vscode-main/src/vs/workbench/contrib/codeEditor/browser/quickaccess/gotoSymbolQuickAccess.ts"
+        idx = 36136
+
+        if idx == None:
+            idx = get_sample_idx(repo, path)
+            print(idx)
+
+        sample = DATASET[idx]
+        tree = to_tree(sample)
+
+        # tokenizer = CodeTokenizer.from_file("/home/johannes/projects/tokenizecode/trained_tokenizers/20211108_bpe20k-fpl40k.json")
+        tokenizer = CodeTokenizer.from_file("/home/johannes/projects/multicoder/tokenizer/20211108_bpe30k-fpl40k-with-nonterminals.json")
+        # tokenizer = CodeTokenizer.from_file("/home/johannes/projects/multicoder/my_bpe_on_dataset4.json")
+        print(sample["repository"])
+        print(sample["path"])
+        tree.pprint()
+        code_encoding = tokenizer.encode_to_tree(tree)
+        tokenizer.decode_tree(code_encoding, keep_bpe=True).pprint()
+        # print(code_encoding)
+        # print(code_encoding.ids)
+        # code_decoded = tokenizer.decode(code_encoding.ids)
+        # self.assertSequenceEqual(code, code_decoded)
+
+    def test_encode_weird_sample3(self) -> None:
+        from multicoder.utils import to_tree
+        repo = "tensorflow/tensorflow"
+        path = "tensorflow-master/tensorflow/core/tfrt/eager/tfrt_context.cc"
+        idx = 14454
+
+        if idx == None:
+            idx = get_sample_idx(repo, path)
+            print(idx)
+
+        sample = DATASET[idx]
+        tree = to_tree(sample)
+
+        # tokenizer = CodeTokenizer.from_file("/home/johannes/projects/tokenizecode/trained_tokenizers/20211108_bpe20k-fpl40k.json")
+        tokenizer = CodeTokenizer.from_file("/home/johannes/projects/multicoder/tokenizer/20211108_bpe30k-fpl40k-with-nonterminals.json")
+        # tokenizer = CodeTokenizer.from_file("/home/johannes/projects/multicoder/my_bpe_on_dataset4.json")
+        print(sample["repository"])
+        print(sample["path"])
+        tree.pprint()
+        code_encoding = tokenizer.encode_to_tree(tree)
+        tokenizer.decode_tree(code_encoding, keep_bpe=True).pprint()
+        # print(code_encoding)
+        # print(code_encoding.ids)
+        # code_decoded = tokenizer.decode(code_encoding.ids)
+        # self.assertSequenceEqual(code, code_decoded)
 
     def test_encode_with_a_tree(self) -> None:
         tokenizer = CodeTokenizer()

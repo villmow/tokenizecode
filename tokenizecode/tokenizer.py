@@ -11,7 +11,7 @@ from tokenizecode.parser import CodeParser
 from tokenizecode.utils import TensorTreeWithStrings, TensorTreeWithInts, is_tree_of_strings, get_project_root
 
 
-DEFAULT_TOKENIZER_BPE = get_project_root() / "trained_tokenizers/20211108_bpe20k-fpl40k.json"
+DEFAULT_TOKENIZER_BPE = get_project_root() / "trained_tokenizers/20211108_bpe30k-fpl40k-with-nonterminals.json"
 
 
 class CodeTokenizer:
@@ -29,7 +29,7 @@ class CodeTokenizer:
         if self._parser is None:
             self._parser = CodeParser()
 
-        return self.parser
+        return self._parser
 
     def _inputs_to_tree(self, inputs: Union[str, TensorTreeWithStrings], lang: Optional[str] = None) -> TensorTreeWithStrings:
         """ Either parses a piece of code or uses the tree."""
@@ -126,7 +126,10 @@ class CodeTokenizer:
         return tree.leaves()
 
     def add_specials(self, tokens):
-        self.tokenizer.model.add_special_tokens(tokens)
+        self.tokenizer.tokenizer.add_special_tokens(
+            {"additional_special_tokens": tokens}
+        )
 
     def save(self, filepath: Union[str, Path], pretty: bool = False):
-        self.tokenizer.model.save(str(filepath), pretty)
+        self.tokenizer.tokenizer.save_pretrained(str(filepath), legacy_format=False)
+        # self.tokenizer.tokenizer.save(str(filepath), pretty)
