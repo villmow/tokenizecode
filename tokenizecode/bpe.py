@@ -288,7 +288,7 @@ class TokenizerBPE:
                 _add_next_token()
             elif not tree.get_node_data(old_node_idx):
                 # this is bad and should not happen.
-                log.warning("Empty node detected. Will delete empty node and restart.")
+                # log.warning("Empty node detected. Will delete empty node and restart.")
                 new_tree = tree.delete_node(old_node_idx)
                 return self.encode_tree(new_tree)
 
