@@ -190,6 +190,8 @@ class SentencePieceBPE:
         return text.replace(' ', '').replace('\u2581', ' ').strip()
 
 import transformers
+import time
+
 
 class TokenizerBPE:
     """ Add new BPE implementations by subclassing TokenizerBPE and implement `train()`"""
@@ -209,17 +211,51 @@ class TokenizerBPE:
 
         return encoding
 
+    def encode_text_batch(self, texts: Union[list[str]], is_pretokenized: Optional[bool] = None) -> transformers.BatchEncoding:
+        if is_pretokenized is None:
+            # either string or list of strings
+            is_pretokenized = isinstance(texts[0], list)
+
+        # start = time.time()
+        encoding = self.tokenizer(texts, is_split_into_words=is_pretokenized).encodings
+        # dur = time.time() - start
+        # log.info(f"done encoding {len(texts)} texts in {dur:.02f} seconds ")
+
+        return encoding
+
     def decode_text(self, ids) -> str:
         out = self.tokenizer.decode(ids)
         return out
 
     def encode_tree(self, tree: TensorTreeWithStrings) -> TensorTreeWithInts:
-        """ Produces a tree with IDs and artificial BPE nodes. """
         assert isinstance(tree.node_data[0], str), "tree should consist of strings"
         encoded_nodes = self.tokenizer(tree.node_data, is_split_into_words=True).encodings[0]
+        return self._encode_tree(tree, encoded_nodes)
+
+    def encode_tree_batch(self, trees: list[TensorTreeWithStrings], max_encoded_nodes: Optional[int] = None) -> list[TensorTreeWithInts]:
+        assert isinstance(trees[0].node_data[0], str), "tree should consist of strings"
+        batch_of_node_data = [ tree.node_data for tree in trees]
+
+        # start = time.time()
+        encoded_nodes = self.tokenizer(batch_of_node_data, is_split_into_words=True).encodings
+        # dur1 = time.time() - start
+        # log.info(f"done encoding {len(trees)} trees in {dur1:.02f} seconds ")
+
+        # start = time.time()
+        res = [
+            self._encode_tree(tree, encoding) if (max_encoded_nodes is None or len(encoding.ids) < max_encoded_nodes) else None
+            for tree, encoding in zip(trees, encoded_nodes)
+        ]
+        # dur2 = time.time() - start
+        # log.info(f"--done applying bpe to {len(trees)} trees in {dur1:.02f}/{dur2:.02f} ({(dur2 + dur1) / len(trees):.2f}/sample)")
+
+        return res
+    # @timeoutable
+    def _encode_tree(self, tree: TensorTreeWithStrings, encoded_node: tokenizers.Encoding) -> TensorTreeWithInts:
+        """ Produces a tree with IDs and artificial BPE nodes. """
 
         # compute final amount of nodes
-        approx_num_nodes = len(encoded_nodes.ids) * 2
+        approx_num_nodes = len(encoded_node.ids) * 2
 
         # init output arrays
         new_tokens = torch.zeros((approx_num_nodes,), dtype=torch.int64)
@@ -235,8 +271,8 @@ class TokenizerBPE:
         idx_new_node = 0
         idx_encoded_node = 0
 
-        word_ids = encoded_nodes.word_ids
-        token_ids = encoded_nodes.ids
+        word_ids = encoded_node.word_ids
+        token_ids = encoded_node.ids
 
         def _add_next_token(token=None, parent_added: bool = True):
             nonlocal new_tokens, idx_new_node, idx_encoded_node
@@ -264,7 +300,7 @@ class TokenizerBPE:
                     while word_ids[end_idx] == word_ids[end_idx + 1]:
                         end_idx += 1
                     end_idx += 1
-                    splitted_tokens = encoded_nodes.tokens[idx_encoded_node: end_idx]
+                    splitted_tokens = encoded_node.tokens[idx_encoded_node: end_idx]
                     log.error(f"Nonterminal was split into: {splitted_tokens}. Will be set to [UNK].")
 
                     _add_next_token(token=self.tokenizer.convert_tokens_to_ids("[UNK]"), parent_added=True)
