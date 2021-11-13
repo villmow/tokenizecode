@@ -242,10 +242,16 @@ class TokenizerBPE:
         # log.info(f"done encoding {len(trees)} trees in {dur1:.02f} seconds ")
 
         # start = time.time()
-        res = [
-            self._encode_tree(tree, encoding) if (max_encoded_nodes is None or len(encoding.ids) < max_encoded_nodes) else None
-            for tree, encoding in zip(trees, encoded_nodes)
-        ]
+        res = []
+        for tree, encoding in zip(trees, encoded_nodes):
+            bpe_tree = None
+            if (max_encoded_nodes is None or 2 < len(encoding.ids) < max_encoded_nodes):
+                try:
+                    bpe_tree = self._encode_tree(tree, encoding)
+                except Exception as e:
+                    pass
+            res.append(bpe_tree)
+
         # dur2 = time.time() - start
         # log.info(f"--done applying bpe to {len(trees)} trees in {dur1:.02f}/{dur2:.02f} ({(dur2 + dur1) / len(trees):.2f}/sample)")
 
