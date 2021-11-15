@@ -191,7 +191,7 @@ class SentencePieceBPE:
 
 import transformers
 import time
-
+from timeout_decorator import timeout
 
 class TokenizerBPE:
     """ Add new BPE implementations by subclassing TokenizerBPE and implement `train()`"""
@@ -232,11 +232,13 @@ class TokenizerBPE:
         encoded_nodes = self.tokenizer(tree.node_data, is_split_into_words=True).encodings[0]
         return self._encode_tree(tree, encoded_nodes)
 
+    @timeout(seconds=50, use_signals=True)
     def encode_tree_batch(self, trees: list[TensorTreeWithStrings], max_encoded_nodes: Optional[int] = None) -> list[TensorTreeWithInts]:
         assert isinstance(trees[0].node_data[0], str), "tree should consist of strings"
         batch_of_node_data = [ tree.node_data for tree in trees]
 
         # start = time.time()
+
         encoded_nodes = self.tokenizer(batch_of_node_data, is_split_into_words=True).encodings
         # dur1 = time.time() - start
         # log.info(f"done encoding {len(trees)} trees in {dur1:.02f} seconds ")
