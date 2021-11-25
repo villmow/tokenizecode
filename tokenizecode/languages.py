@@ -409,3 +409,6 @@ def get_language_identifier(language_name: str) -> Optional[str]:
         return ALIAS_TO_LANGUAGE[language_name]
     elif language_name.lower() in ALIAS_TO_LANGUAGE:
         return ALIAS_TO_LANGUAGE[language_name.lower()]
+    else:
+        log.warning(f"Language identifier {language_name} unknown.")
+        return language_name
