@@ -191,6 +191,7 @@ class SentencePieceBPE:
 
 import transformers
 from timeout_decorator import timeout
+import time
 
 class TokenizerBPE:
     """ Add new BPE implementations by subclassing TokenizerBPE and implement `train()`"""
@@ -249,13 +250,13 @@ class TokenizerBPE:
         assert isinstance(trees[0].node_data[0], str), "tree should consist of strings"
         batch_of_node_data = [ tree.node_data for tree in trees]
 
-        # start = time.time()
+        start = time.time()
 
         encoded_nodes = self.tokenizer(batch_of_node_data, is_split_into_words=True).encodings
-        # dur1 = time.time() - start
-        # log.info(f"done encoding {len(trees)} trees in {dur1:.02f} seconds ")
+        dur1 = time.time() - start
+        log.info(f"done encoding {len(trees)} trees in {dur1:.02f} seconds ")
 
-        # start = time.time()
+        start = time.time()
         res = []
         for tree, encoding in zip(trees, encoded_nodes):
             bpe_tree = None
@@ -266,8 +267,8 @@ class TokenizerBPE:
                     pass
             res.append(bpe_tree)
 
-        # dur2 = time.time() - start
-        # log.info(f"--done applying bpe to {len(trees)} trees in {dur1:.02f}/{dur2:.02f} ({(dur2 + dur1) / len(trees):.2f}/sample)")
+        dur2 = time.time() - start
+        log.info(f"--done applying bpe to {len(trees)} trees in {dur1:.02f}/{dur2:.02f} ({(dur2 + dur1) / len(trees):.2f}/sample)")
 
         return res
     # @timeoutable
