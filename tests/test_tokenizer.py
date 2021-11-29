@@ -1,4 +1,5 @@
 import unittest
+from typing import Optional, Tuple, List
 
 import torch
 
@@ -114,6 +115,7 @@ class TestTokenizer(unittest.TestCase):
         # code_decoded = tokenizer.decode(code_encoding.ids)
         # self.assertSequenceEqual(code, code_decoded)
 
+
     def test_encode_weird_sample3(self) -> None:
         from multicoder.utils import to_tree
         repo = "tensorflow/tensorflow"
@@ -169,6 +171,112 @@ class TestTokenizer(unittest.TestCase):
 
         decoded_tree = tokenizer.decode_tree(tree_encoded, keep_bpe=False)
         self.assertTreeEqual(parsed_tree, decoded_tree)
+
+    def test_encode_to_tree_gpt2(self):
+        tokenizer = load_gpt2_tokenizer()
+        language = "java"
+
+        code = SAMPLE_CODE[language]
+
+        parsed_tree = tokenizer.parse(code, language)
+
+        tree_encoded = tokenizer.encode_to_tree(code, language)
+        tokenizer.decode_tree(tree_encoded, keep_bpe=True).pprint()
+
+        decoded_tree = tokenizer.decode_tree(tree_encoded, keep_bpe=False)
+        self.assertTreeEqual(parsed_tree, decoded_tree)
+
+    def test_encode_gpt2(self) -> None:
+        from multicoder.utils import to_tree
+        tokenizer = load_gpt2_tokenizer()
+
+        for i, sample in enumerate(DATASET.shuffle(42)):
+            with self.subTest(f"{sample['repository']}/{sample['path']}") as test:
+                if sample["is_code_file"]:
+                    tree = to_tree(sample)
+                    tree_encoded = tokenizer.encode_to_tree(tree)
+                    decoded_tree = tokenizer.decode_tree(tree_encoded, keep_bpe=False)
+                    self.assertTreeEqual(tree, decoded_tree)
+                else:
+                    text = sample["tokens"][0]
+                    # text = sample["tokens"]
+                    text_encoded = tokenizer.encode_text(text)
+                    text_decded = tokenizer.decode(text_encoded.ids)
+                    self.assertSequenceEqual(text, text_decded)
+                    # self.assertSequenceEqual(text[0], text_decded)
+            if i > 100:
+                break
+                # tokenizer.decode_tree(code_encoding, keep_bpe=True).pprint()
+
+
+    def test_encode_all(self) -> None:
+        from multicoder.utils import to_tree
+        tokenizer = CodeTokenizer()
+
+        for i, sample in enumerate(DATASET.shuffle(42)):
+            with self.subTest(f"{sample['repository']}/{sample['path']}") as test:
+                if sample["is_code_file"]:
+                    tree = to_tree(sample)
+                    tree_encoded = tokenizer.encode_to_tree(tree)
+                    decoded_tree = tokenizer.decode_tree(tree_encoded, keep_bpe=False)
+                    self.assertTreeEqual(tree, decoded_tree)
+                else:
+                    text = sample["tokens"][0]
+                    text_encoded = tokenizer.encode_text(text)
+                    text_decded = tokenizer.decode(text_encoded.ids)
+                    self.assertSequenceEqual(text, text_decded)
+                    # self.assertSequenceEqual(text[0], text_decded)
+            if i > 100:
+                break
+                # tokenizer.decode_tree(code_encoding, keep_bpe=True).pprint()
+
+
+
+import json
+
+
+def create_gpt2_tokenizer():
+    from transformers import PreTrainedTokenizerFast
+    from tokenizecode.bpe import TokenizerBPE
+    bpe = PreTrainedTokenizerFast.from_pretrained(
+        "gpt2",
+        add_prefix_space=True,
+        pad_token="[PAD]",
+        unk_token="[UNK]",
+        bos_token="[CLS]",
+        eos_token="[EOS]",
+        model_max_len=1024
+    )
+
+    import json
+    with open("/home/johannes/projects/multicoder/tokenizer/nonterminals.json", "rt") as f:
+        nonterminals = json.load(f)
+
+    added = bpe.add_tokens(new_tokens=["[MASK]", "[BPE]", "        ", "    ", "  ", " ", "\n\n", "\n"], special_tokens=True)
+    added = bpe.add_tokens(new_tokens=list(nonterminals.keys()), special_tokens=True)
+
+    bpe.save_pretrained("tokenizer")
+    print(added)
+    print(bpe)
+
+    tokenizer = CodeTokenizer(TokenizerBPE(bpe))
+    return tokenizer
+
+
+
+def load_gpt2_tokenizer():
+    create_gpt2_tokenizer()
+
+    from transformers import PreTrainedTokenizerFast
+    from tokenizecode.bpe import TokenizerBPE
+
+    bpe = PreTrainedTokenizerFast.from_pretrained("tokenizer",         model_max_len=1024)
+    print(bpe)
+
+    tokenizer = CodeTokenizer(TokenizerBPE(bpe))
+    return tokenizer
+
+
 
 
 

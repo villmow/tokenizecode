@@ -190,17 +190,29 @@ class SentencePieceBPE:
         return text.replace(' ', '').replace('\u2581', ' ').strip()
 
 import transformers
-import time
 from timeout_decorator import timeout
 
 class TokenizerBPE:
     """ Add new BPE implementations by subclassing TokenizerBPE and implement `train()`"""
 
-    def __init__(self, tokenizer_file: Union[str, Path]):
+    def __init__(self, tokenizer: transformers.PreTrainedTokenizerFast):
         super().__init__()
 
-        self.tokenizer = transformers.PreTrainedTokenizerFast(tokenizer_file=str(tokenizer_file))
+        self.tokenizer = tokenizer
         self.bpe_nonterminal_id = self.tokenizer.convert_tokens_to_ids(BPE_NONTERMINAL)
+
+    @classmethod
+    def from_pretrained(cls, tokenizer_file_or_directory: Path):
+        return cls(cls.load_tokenizer_from_pretrained(tokenizer_file_or_directory))
+
+    @classmethod
+    def load_tokenizer_from_pretrained(cls, file_or_directory: Path) -> transformers.PreTrainedTokenizerFast:
+        if file_or_directory.is_dir():
+            return transformers.PreTrainedTokenizerFast(str(file_or_directory))
+        elif file_or_directory.is_file():
+            return transformers.PreTrainedTokenizerFast(tokenizer_file=str(file_or_directory))
+        else:
+            raise ValueError
 
     def encode_text(self, text: Union[str, list[str]], is_pretokenized: Optional[bool] = None) -> transformers.BatchEncoding:
         if is_pretokenized is None:
@@ -232,7 +244,7 @@ class TokenizerBPE:
         encoded_nodes = self.tokenizer(tree.node_data, is_split_into_words=True).encodings[0]
         return self._encode_tree(tree, encoded_nodes)
 
-    @timeout(seconds=50, use_signals=True)
+    # @timeout(seconds=50, use_signals=False)
     def encode_tree_batch(self, trees: list[TensorTreeWithStrings], max_encoded_nodes: Optional[int] = None) -> list[TensorTreeWithInts]:
         assert isinstance(trees[0].node_data[0], str), "tree should consist of strings"
         batch_of_node_data = [ tree.node_data for tree in trees]
@@ -404,7 +416,8 @@ class TokenizerBPE:
         tree_with_strings = tensortree.tree(
             parents=tree.parents,
             descendants=tree.descendants,
-            node_data=self.tokenizer.convert_ids_to_tokens(tree.node_data)
+            # node_data=self.tokenizer.decoder.decode(self.tokenizer.convert_ids_to_tokens(tree.node_data))
+            node_data=self.tokenizer.batch_decode(tree.node_data)
         )
 
         if not keep_bpe:

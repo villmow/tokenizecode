@@ -389,19 +389,29 @@ void ChaCha20::Crypt(const unsigned char* m, unsigned char* c, size_t bytes)
 	.case__title {
 		padding: 0 0 calc(var(--general-line-height) / 2);
 	}""",
-    'c-sharp': """using System.Reflection;
-using System.Runtime.InteropServices;
 
-[assembly: AssemblyProduct("Hangfire")]
-[assembly: AssemblyCompany("Sergey Odinokov")]
-[assembly: AssemblyCopyright("Copyright © 2013-2016 Sergey Odinokov")]
-[assembly: AssemblyCulture("")]
-
-[assembly: ComVisible(false)]
-
-// Don't edit manually! Use `build.bat version` command instead!
-[assembly: AssemblyVersion("1.7.25")]
-""",
+    'c-sharp': """using System;
+namespace BubbleSort {
+   class MySort {
+      static void Main(string[] args) {
+         int[] arr = { 78, 55, 45, 98, 13 };
+         int temp;
+         for (int j = 0; j <= arr.Length - 2; j++) {
+            for (int i = 0; i <= arr.Length - 2; i++) {
+               if (arr[i] > arr[i + 1]) {
+                  temp= arr[i + 1];
+                  arr[i + 1] = arr[i];
+                  arr[i] = temp;
+               }
+            }
+         }
+         Console.WriteLine("Sorted:");
+         foreach (int p in arr)
+            Console.Write(p + " ");
+         Console.Read();
+      }
+   }
+}""",
     'haskell': """{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 -- | Semantic functionality for Python programs.
 module Language.Python
@@ -435,6 +445,7 @@ instance Tags.ToTags Term where
 -- instance ToScopeGraph Term where
 --   scopeGraph = scopeGraphModule . getTerm
 """,
+
     'html': """<p>Anna is a designer with many interests—she favors fonts and graphics when working, and illustration as a welcomed
     distraction. She holds an MA in Visual Communication from the University of Fine Arts in Poznań, and discovered her
     interest in pattern and calligraphy while studying in Vilnius, Lithuania. She designed Signika, a type family for
@@ -450,7 +461,7 @@ package app
 
 import (
 	"net/http"
-
+    
 	"github.com/microcosm-cc/bluemonday"
 	"gopkg.in/macaron.v1"
 )
@@ -1771,3 +1782,141 @@ public class NetscapeDraftSpec extends CookieSpecBase {
     }
 
 }"""
+
+OTHER_SAMPLES = [
+    ("go", """package main
+
+import (
+    "bufio"
+    "fmt"
+    "io"
+    "os"
+)
+
+func check(e error) {
+    if e != nil {
+        panic(e)
+    }
+}
+
+func main() {
+
+    dat, err := os.ReadFile("/tmp/dat")
+    check(err)
+    fmt.Print(string(dat))
+
+    f, err := os.Open("/tmp/dat")
+    check(err)
+
+    b1 := make([]byte, 5)
+    n1, err := f.Read(b1)
+    check(err)
+    fmt.Printf("%d bytes: %s\n", n1, string(b1[:n1]))
+
+    o2, err := f.Seek(6, 0)
+    check(err)
+    b2 := make([]byte, 2)
+    n2, err := f.Read(b2)
+    check(err)
+    fmt.Printf("%d bytes @ %d: ", n2, o2)
+    fmt.Printf("%v\n", string(b2[:n2]))
+
+    o3, err := f.Seek(6, 0)
+    check(err)
+    b3 := make([]byte, 2)
+    n3, err := io.ReadAtLeast(f, b3, 2)
+    check(err)
+    fmt.Printf("%d bytes @ %d: %s\n", n3, o3, string(b3))
+
+    _, err = f.Seek(0, 0)
+    check(err)
+
+    r4 := bufio.NewReader(f)
+    b4, err := r4.Peek(5)
+    check(err)
+    fmt.Printf("5 bytes: %s\n", string(b4))
+
+    f.Close()
+}"""),
+    ("haskell", """import Test.QuickCheck
+import Data.List (sort)
+
+-- Going from left to right, swaps two adjacent elements if they are not in order.
+-- After the first go, the largest element in the list has bubbled up to the end
+-- of the list. In the next go, we start swapping from the first element to the
+-- penultimate element and so forth.
+bubbleSort :: Ord a => [a] -> [a]
+bubbleSort xs = go xs (length xs -1)
+  where go xs limit | limit > 0 = let swapped = swapTill xs limit in
+                                  go swapped (limit -1)
+                    | otherwise = xs
+
+-- Swaps adjacent elements in a list if they are not in order, until a limit.
+-- After this, the largest elements, from limit to (length xs),
+-- are sorted at the list's end.
+swapTill :: (Ord a, Num p) => [a] -> p -> [a]
+swapTill xs limit = go xs 0
+  where go xs count | count < limit = swap xs
+                    | otherwise = xs
+                      where swap [x] = [x]
+                            swap (x:y:xs) | x < y     = x : (go (y:xs) (count +1))
+                                          | otherwise = y : (go (x:xs) (count +1))
+
+-- Tests
+bubbleSortWorks :: [Int] -> Bool
+bubbleSortWorks xs = bubbleSort xs == sort xs
+
+runQuickCheck = quickCheck bubbleSortWorks""",),
+    ('c-sharp', """using System.Reflection;
+using System.Runtime.InteropServices;
+
+[assembly: AssemblyProduct("Hangfire")]
+[assembly: AssemblyCompany("Sergey Odinokov")]
+[assembly: AssemblyCopyright("Copyright © 2013-2016 Sergey Odinokov")]
+[assembly: AssemblyCulture("")]
+
+[assembly: ComVisible(false)]
+
+// Don't edit manually! Use `build.bat version` command instead!
+[assembly: AssemblyVersion("1.7.25")]
+"""),
+    ('ocaml', """open Base ;;
+class istack = object
+  val mutable v = [0; 2]
+
+  method pop =
+    match v with
+    | hd :: tl ->
+      v <- tl;
+      Some hd
+    | [] -> None
+
+  method push hd =
+    v <- hd :: v
+end
+;;
+class istack :
+  object
+    val mutable v : int list
+    method pop : int option
+    method push : int -> unit
+  end"""),
+    ('scala', """object TypeAliases1 extends App {
+
+    type Row = List[Int]
+    def Row(xs: Int*) = List(xs: _*)
+ 
+    type Matrix = List[Row]
+    def Matrix(xs: Row*) = List(xs: _*)
+ 
+    val m = Matrix(Row(1,2,3),
+                   Row(1,2,3),
+                   Row(1,2,3))
+
+    println(m)
+    println(m.getClass)
+
+}"""),
+]
+OTHER_SAMPLES += list(SAMPLE_CODE.items())
+OTHER_SAMPLES.sort()

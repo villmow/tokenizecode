@@ -3,6 +3,7 @@ from typing import Optional, Union
 
 import tokenizers
 import torch
+import transformers
 
 from tensortree import TensorTree
 
@@ -19,10 +20,14 @@ class CodeTokenizer:
 
     def __init__(self, tokenizer: Optional[TokenizerBPE] = None, parser: Optional[CodeParser] = None):
         if tokenizer is None:
-            tokenizer = TokenizerBPE(DEFAULT_TOKENIZER_BPE)
+            tokenizer = TokenizerBPE.from_pretrained(DEFAULT_TOKENIZER_BPE)
 
         self.tokenizer = tokenizer
         self._parser = parser if parser is not None else None
+
+    @property
+    def hf_tokenizer(self) -> transformers.PreTrainedTokenizerFast:
+        return self.tokenizer.tokenizer
 
     @property
     def parser(self):
@@ -49,9 +54,9 @@ class CodeTokenizer:
         return tree
 
     @classmethod
-    def from_file(cls, bpe_file: str):
+    def from_file(cls, tokenizer_file_or_directory: Path):
         from tokenizecode.bpe import TokenizerBPE
-        return cls(TokenizerBPE(bpe_file))
+        return cls(TokenizerBPE.from_pretrained(tokenizer_file_or_directory))
 
     def parse(self, code: str, lang: str) -> TensorTreeWithStrings:
         """ Turns a piece code into a syntax tree. """
