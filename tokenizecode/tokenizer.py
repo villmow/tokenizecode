@@ -25,6 +25,7 @@ class CodeTokenizer:
         self.tokenizer = tokenizer
         self._parser = parser if parser is not None else None
 
+
     @property
     def hf_tokenizer(self) -> transformers.PreTrainedTokenizerFast:
         return self.tokenizer.tokenizer
@@ -138,3 +139,6 @@ class CodeTokenizer:
     def save(self, filepath: Union[str, Path], pretty: bool = False):
         self.tokenizer.tokenizer.save_pretrained(str(filepath), legacy_format=False)
         # self.tokenizer.tokenizer.save(str(filepath), pretty)
+
+    def __len__(self):
+        return len(self.hf_tokenizer)

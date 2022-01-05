@@ -202,6 +202,9 @@ class TokenizerBPE:
         self.tokenizer = tokenizer
         self.bpe_nonterminal_id = self.tokenizer.convert_tokens_to_ids(BPE_NONTERMINAL)
 
+    def __len__(self):
+        return len(self.tokenizer)
+
     @classmethod
     def from_pretrained(cls, tokenizer_file_or_directory: Path):
         return cls(cls.load_tokenizer_from_pretrained(tokenizer_file_or_directory))
