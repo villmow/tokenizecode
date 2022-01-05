@@ -8,6 +8,9 @@ import datasets
 import numpy as np
 import torch
 
+import transformers
+import time
+
 from tensortree import TensorTree
 import tensortree
 from tokenizecode.utils import TensorTreeWithStrings, TensorTreeWithInts, is_tree_of_strings
@@ -189,9 +192,6 @@ class SentencePieceBPE:
 
         return text.replace(' ', '').replace('\u2581', ' ').strip()
 
-import transformers
-from timeout_decorator import timeout
-import time
 
 class TokenizerBPE:
     """ Add new BPE implementations by subclassing TokenizerBPE and implement `train()`"""
