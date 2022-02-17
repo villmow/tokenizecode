@@ -6,7 +6,6 @@ import warnings
 import shutil
 from tree_sitter import Language, Parser
 
-from tokenizecode import get_project_root
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,8 +13,13 @@ from typing import Optional
 
 import tree_sitter
 
-from tensortree import TensorTree
 import tensortree
+from tensortree import TensorTree
+
+
+from tokenizecode import get_project_root
+from tokenizecode.utils import TensorTreeWithStrings
+from tokenizecode.point import Span, Point
 
 log = logging.getLogger(__name__)
 
@@ -144,56 +148,14 @@ class TreeSitterParser:
 
 
 @dataclass
-class Point:
-    row: int
-    column: int
-
-    def __eq__(self, other):
-        if not isinstance(other, Point):
-            return False
-
-        return self.row == other.row and self.column == other.column
-
-    def __lt__(self, other):
-        if not isinstance(other, Point):
-            return False
-
-        if self.row < other.row:
-            return True
-        elif self.row == other.row and self.column < other.column:
-            return True
-
-        return False
-
-    def __le__(self, other):
-        if not isinstance(other, Point):
-            return False
-
-        if self.row < other.row:
-            return True
-        elif self.row == other.row and self.column <= other.column:
-            return True
-
-        return False
-
-
-@dataclass
-class NodeSpan:
-    start_byte: int
-    end_byte: int
-    start_point: Point
-    end_point: Point
-
-
-@dataclass
-class TmpNode:
+class _TmpNode:
     """ Helper during parsing. """
     id_: int
     text: str
     parent_id: int
     descendants: int
 
-    span: NodeSpan
+    span: Span
 
     def __post_init__(self):
         if isinstance(self.text, bytes):
@@ -206,13 +168,13 @@ class TreeTraversal:
     def __init__(self):
         self.errors = 0  # number of errors in last traversal
 
-    def __call__(self, code: str, tree: tree_sitter.Tree) -> Iterable[TmpNode]:
+    def __call__(self, code: str, tree: tree_sitter.Tree) -> Iterable[_TmpNode]:
         raise NotImplementedError
 
 
 class FullTraversal(TreeTraversal):
 
-    def __call__(self, code: str, tree: tree_sitter.Tree) -> Iterable[TmpNode]:
+    def __call__(self, code: str, tree: tree_sitter.Tree) -> Iterable[_TmpNode]:
         self.errors = 0  # will be incremented in traverse
 
         nodes = list(self.traverse_tree(code, tree))
@@ -237,8 +199,8 @@ class FullTraversal(TreeTraversal):
         last_end_point: Point = None
 
         node_id = -1
-        open_nodes: list[TmpNode] = []
-        root: Optional[TmpNode] = None
+        open_nodes: list[_TmpNode] = []
+        root: Optional[_TmpNode] = None
 
         def text_between(node_start_byte, node_start_point):
             # nonlocal last_leaf_checked, last_leaf
@@ -269,7 +231,7 @@ class FullTraversal(TreeTraversal):
             if text == "[ERROR]":
                 self.errors += 1
 
-            node = TmpNode(id_=node_id, text=text, parent_id=parent_id, descendants=0, span=span)
+            node = _TmpNode(id_=node_id, text=text, parent_id=parent_id, descendants=0, span=span)
 
             if parent_id == -1:
                 root = node
@@ -279,8 +241,8 @@ class FullTraversal(TreeTraversal):
         def to_node(node, read_text: bool):
             nonlocal last_end_byte, last_end_point
 
-            span = NodeSpan(start_byte=node.start_byte, end_byte=node.end_byte,
-                            start_point=Point(*node.start_point), end_point=Point(*node.end_point))
+            span = Span(start_byte=node.start_byte, end_byte=node.end_byte,
+                        start_point=Point(*node.start_point), end_point=Point(*node.end_point))
             text = code[span.start_byte:span.end_byte] if read_text else f"[{node.type}]"
             node = add_node(text, span)
 
@@ -293,7 +255,7 @@ class FullTraversal(TreeTraversal):
         while not reached_root:
             code_between = text_between(cursor.node.start_byte, cursor.node.start_point)
             if code_between:
-                code_span = NodeSpan(
+                code_span = Span(
                     start_byte=last_end_byte, end_byte=cursor.node.start_byte,
                     start_point=last_end_point, end_point=Point(*cursor.node.start_point)
                 )
@@ -335,7 +297,7 @@ class FullTraversal(TreeTraversal):
 
         code_between = text_between(cursor.node.end_byte, cursor.node.end_point)
         if code_between:
-            code_between_span = NodeSpan(
+            code_between_span = Span(
                 start_byte=last_end_byte, end_byte=cursor.node.end_byte,
                 start_point=last_end_point, end_point=Point(*cursor.node.end_point)
             )
@@ -343,24 +305,7 @@ class FullTraversal(TreeTraversal):
             root.descendants += 1
 
 
-class SplitLinesTraversal(TreeTraversal):
-    def __call__(self, code: str, tree: tree_sitter.Tree) -> Iterable[TmpNode]:
-        self.errors = 0  # will be incremented in traverse
-
-        nodes = list(self.traverse_tree_and_splitlines(code, tree))
-
-        if self.errors:
-            import warnings
-            warnings.warn(f"Found {self.errors} errors while parsing. Is the parser set to the correct language?")
-
-        return nodes
-
-    @staticmethod
-    def traverse_tree_and_splitlines(code: str, tree: tree_sitter.Tree):
-        raise NotImplementedError
-
-
-def to_tensortree(nodes: list[TmpNode]) -> tuple[TensorTree, list[NodeSpan]]:
+def to_tensortree(nodes: list[_TmpNode]) -> tuple[TensorTree, list[Span]]:
     # correct descendants value will be set after iteration (!)
     node_data, parents, descendants, positions = [], [], [], []
 
@@ -372,6 +317,18 @@ def to_tensortree(nodes: list[TmpNode]) -> tuple[TensorTree, list[NodeSpan]]:
         positions.append(node.span)
 
     return tensortree.tree(parents, node_data, descendants), positions
+
+
+@dataclass
+class CodeParsingOutput:
+    tree: TensorTreeWithStrings
+    positions: list[Span]
+    num_errors: int
+    language: str
+
+    def __post_init__(self):
+        if len(self.positions) != len(self.tree):
+            raise ValueError("Should have a position for every node in the tree.")
 
 
 class CodeParser:
@@ -387,16 +344,13 @@ class CodeParser:
     def supported_languages() -> set[str]:
         return TreeSitterParser.supported_languages
 
-    def parse(self, code: str = None, lang: str = "java",
-              output_positions: bool = False, output_errors: bool = False) -> Union[
-        TensorTree, tuple[TensorTree, int], tuple[TensorTree, list[NodeSpan]], tuple[TensorTree, list[NodeSpan], int]]:
+    def parse(self, code: str = None, lang: str = "java") -> CodeParsingOutput:
         ts_tree = self.parser.parse(code, lang)
         nodes = list(self.traverse(code, ts_tree))
         num_errors = self.traverse.errors
         tree, positions = to_tensortree(nodes)
 
-        res = (tree, positions) if output_positions else tree
-        return (res, num_errors) if output_errors else res
+        return CodeParsingOutput(tree, positions, num_errors=num_errors, language=lang)
 
     @staticmethod
     def unparse(tree: TensorTree) -> str:

@@ -1,7 +1,9 @@
 from typing import Union, Optional
 
 from pathlib import Path
-import re
+
+from tensortree import TensorTree
+
 
 HAS_MAGIC = False
 try:
@@ -47,13 +49,9 @@ def smart_read_file(filepath: Union[str, Path]) -> str:
     return content
 
 
-from tensortree import TensorTree
-
-
 def is_tree_of_strings(tree: TensorTree) -> bool:
     return isinstance(tree.node_data[0], str)
 
 
 TensorTreeWithStrings = TensorTree  # with only strings as nodes
 TensorTreeWithInts = TensorTree  # with ints (ids) as nodes
-
