@@ -105,6 +105,48 @@ class CodeTokenizer:
         tree = self._inputs_to_tree(inputs, lang)
         return self.tokenizer.encode_tree(tree)
 
+    def encode_lines(self, code: str, lang: str, line_start: int, line_end: int,
+                     mask_line_start: int = None, mask_line_end: int = None) -> Union[tokenizers.Encoding, tuple[tokenizers.Encoding, tokenizers.Encoding]]:
+        """
+        Parses the whole file and then selects relevant lines. Lines start at 1. If mask line start is set, those lines
+        will be cut out and the mask token is inserted.
+        """
+        line_start -= 1
+        line_end -= 1
+        mask_line_start = mask_line_start - 1 if mask_line_start is not None else None
+        mask_line_end = mask_line_end - 1 if mask_line_end is not None else None
+        assert line_start <= mask_line_start <= mask_line_end <= line_end
+
+        output = self.parse(code, lang)
+        tree = output.tree
+
+        context_tokens = []
+        mask_tokens = []
+
+        for idx, (node, span) in enumerate(zip(tree.node_data, output.positions)):
+            if not tree.is_leaf(idx):
+                continue
+
+            if line_start <= span.start_point.row <= line_end:
+                if mask_line_start is not None and mask_line_start == span.start_point.row:
+
+                    # keep first space
+                    if node.isspace() and not mask_tokens:
+                        context_tokens.append(node)
+                        context_tokens.append("___MASK___")
+
+                    mask_tokens.append(node)
+
+                elif mask_line_start is not None and mask_line_start <= span.start_point.row <= mask_line_end:
+                    mask_tokens.append(node)
+                else:
+                    context_tokens.append(node)
+
+        if mask_line_start is not None:
+            return self.tokenizer.encode_text(context_tokens), self.tokenizer.encode_text(mask_tokens)
+
+        return self.tokenizer.encode_text(context_tokens)
+
     def decode(self, ids) -> str:
         if isinstance(ids, TensorTreeWithInts):
             tree = ids
