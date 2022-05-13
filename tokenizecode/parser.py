@@ -17,8 +17,7 @@ import tensortree
 from tensortree import TensorTree
 
 
-from tokenizecode import get_project_root
-from tokenizecode.utils import TensorTreeWithStrings
+from tokenizecode.utils import TensorTreeWithStrings, get_project_root
 from tokenizecode.point import Span, Point
 
 log = logging.getLogger(__name__)

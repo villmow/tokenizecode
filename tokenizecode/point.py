@@ -48,3 +48,13 @@ class Span:
     start_point: Point
     end_point: Point
 
+    def __post_init__(self):
+        if isinstance(self.start_point, (tuple, list)):
+            self.start_point = Point(*self.start_point)
+        elif isinstance(self.start_point, dict):
+            self.start_point = Point(**self.start_point)
+
+        if isinstance(self.end_point, tuple):
+            self.end_point = Point(*self.end_point)
+        elif isinstance(self.end_point, dict):
+            self.end_point = Point(**self.end_point)
