@@ -22,13 +22,15 @@ DEFAULT_TOKENIZER_BPE = get_project_root() / "trained_tokenizers/20211108_bpe30k
 
 
 RC_IDENTIFIERS = ["class", "block", "statement"]
-NON_TERMINALS_PATH = "/Users/savinadiez/masterthesis/git/code-buddy/multicoder/tokenizer/nonterminals.json"
+NON_TERMINALS_PATH = "/data/hiwi/savina_evaluation/nonterminals.json"
+# NON_TERMINALS_PATH = "/Users/savinadiez/masterthesis/git/code-buddy/multicoder/tokenizer/nonterminals.json"
 
 with open(NON_TERMINALS_PATH, "rt") as f:
     root_candidates = [rc for rc in json.load(f).keys() if any(identifier in rc
                                                                for identifier in RC_IDENTIFIERS)]
 
-tokenizer = TokenizerBPE.from_pretrained(Path('/Users/savinadiez/masterthesis/git/code-buddy/tokenizecode/trained_tokenizers/20211108_bpe30k-fpl40k-with-nonterminals.json'))
+tokenizer = TokenizerBPE.from_pretrained(Path('/data/hiwi/savina_evaluation/tokenizecode/trained_tokenizers/20211108_bpe30k-fpl40k-with-nonterminals.json'))
+# tokenizer = TokenizerBPE.from_pretrained(Path('/Users/savinadiez/masterthesis/git/code-buddy/tokenizecode/trained_tokenizers/20211108_bpe30k-fpl40k-with-nonterminals.json'))
 CANDIDATE_IDS = np.array(tokenizer.tokenizer.convert_tokens_to_ids(root_candidates))
 
 
