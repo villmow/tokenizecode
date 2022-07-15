@@ -22,15 +22,15 @@ DEFAULT_TOKENIZER_BPE = get_project_root() / "trained_tokenizers/20211108_bpe30k
 
 
 RC_IDENTIFIERS = ["class", "block", "statement"]
-NON_TERMINALS_PATH = "/data/hiwi/savina_evaluation/nonterminals.json"
-# NON_TERMINALS_PATH = "/Users/savinadiez/masterthesis/git/code-buddy/multicoder/tokenizer/nonterminals.json"
+# NON_TERMINALS_PATH = "/data/hiwi/savina_evaluation/nonterminals.json"
+NON_TERMINALS_PATH = "/Users/savinadiez/masterthesis/git/code-buddy/multicoder/tokenizer/nonterminals.json"
 
 with open(NON_TERMINALS_PATH, "rt") as f:
     root_candidates = [rc for rc in json.load(f).keys() if any(identifier in rc
                                                                for identifier in RC_IDENTIFIERS)]
 
-tokenizer = TokenizerBPE.from_pretrained(Path('/data/hiwi/savina_evaluation/tokenizecode/trained_tokenizers/20211108_bpe30k-fpl40k-with-nonterminals.json'))
-# tokenizer = TokenizerBPE.from_pretrained(Path('/Users/savinadiez/masterthesis/git/code-buddy/tokenizecode/trained_tokenizers/20211108_bpe30k-fpl40k-with-nonterminals.json'))
+# tokenizer = TokenizerBPE.from_pretrained(Path('/data/hiwi/savina_evaluation/tokenizecode/trained_tokenizers/20211108_bpe30k-fpl40k-with-nonterminals.json'))
+tokenizer = TokenizerBPE.from_pretrained(Path('/Users/savinadiez/masterthesis/git/code-buddy/tokenizecode/trained_tokenizers/20211108_bpe30k-fpl40k-with-nonterminals.json'))
 CANDIDATE_IDS = np.array(tokenizer.tokenizer.convert_tokens_to_ids(root_candidates))
 
 
@@ -156,78 +156,6 @@ class CodeTokenizer:
         return self.tokenizer.encode_tree(tree)
 
 
-    def encode_lines_suff(self, code: str, lang: str, line_start: int, line_end: int,
-                          mask_line_start: int = None, mask_line_end: int = None):
-
-        line_start -= 1
-        line_end -= 1
-        mask_line_start = mask_line_start - 1 if mask_line_start is not None else None
-        mask_line_end = mask_line_end - 1 if mask_line_end is not None else None
-        assert line_start <= mask_line_start <= mask_line_end <= line_end
-
-        output = self.parse(code, lang)
-        tree = output.tree
-
-        code_lines = code.split('\n')
-        if mask_line_start and mask_line_end:
-            context_code = '\n'.join(
-                code_lines[line_start:mask_line_start] + ['___MASK___'] + code_lines[mask_line_end + 1:line_end])
-        else:
-            context_code = code
-
-        context_output = self.parse(context_code, 'java')
-        context_tree = context_output.tree
-        context_tree = self.tokenizer.encode_tree(context_tree)
-
-        mask_indices = []
-
-        for idx, (node, span) in enumerate(zip(tree.node_data, output.positions)):
-            # keep all nodes
-
-            if line_start <= span.start_point.row <= line_end:
-                if mask_line_start is not None and mask_line_start == span.start_point.row:
-
-                    # keep first space
-                    # if node.isspace() and not mask_indices:
-                    #     context_tokens.append(node)
-                    # else:
-                    #     context_tokens.append("___MASK___")
-
-                    # context_indices.append(idx)
-
-                    mask_indices.append(idx)
-
-                elif mask_line_start is not None and mask_line_start <= span.start_point.row <= mask_line_end:
-                    mask_indices.append(idx)
-                # else:
-                # context_indices.append(idx)
-                # context_tokens.append(node)
-
-        context_tokens, context_attention_mask, context_distances = suff(context_tree)
-
-        # Target tree
-        if mask_indices:
-            mask_levels = tree.levels()[mask_indices]
-            mask_min_level_idx = argmin(mask_levels)
-            mask_min_indices = torch.flatten((mask_levels == mask_levels[mask_min_level_idx]).nonzero())
-
-            target_tree = tensortree.tree([-1], ['[CLS]'])  # language token id??
-            for idx in mask_min_indices:
-                target_tree = target_tree.insert_child(0, tree[mask_indices[idx]])
-                # context_tree = context_tree.delete_node(mask_indices[idx]) # slow af?
-
-            target_tree = self.tokenizer.encode_tree(target_tree)
-
-            target_tokens, target_attention_mask, target_distances = suff(target_tree)
-
-            return target_tokens, target_attention_mask, target_distances, \
-                   context_tokens, context_attention_mask, context_distances
-
-        else:
-            return context_tokens, context_attention_mask, context_distances
-
-
-
     def encode_lines(self, code: str, lang: str, line_start: int, line_end: int,
                      mask_line_start: int = None, mask_line_end: int = None) -> Union[tokenizers.Encoding, tuple[tokenizers.Encoding, tokenizers.Encoding]]:
         """
@@ -238,7 +166,7 @@ class CodeTokenizer:
         line_end -= 1
         mask_line_start = mask_line_start - 1 if mask_line_start is not None else None
         mask_line_end = mask_line_end - 1 if mask_line_end is not None else None
-        assert line_start <= mask_line_start <= mask_line_end <= line_end
+        # assert line_start <= mask_line_start <= mask_line_end <= line_end
 
         output = self.parse(code, lang)
         tree = output.tree
