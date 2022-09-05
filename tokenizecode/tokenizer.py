@@ -36,9 +36,8 @@ class CodeTokenizer:
         self.tokenizer = tokenizer
         self._parser = parser if parser is not None else None
 
-    def __hash__(self):
-        # fixme should hash parser as well
-        return hash(self.hf_tokenizer.vocab)
+    def __eq__(self, other):
+        return self.__class__ == other.__class__ and self.hf_tokenizer.vocab == other.hf_tokenizer.vocab
 
     @property
     def hf_tokenizer(self) -> transformers.PreTrainedTokenizerFast:
