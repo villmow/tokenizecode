@@ -59,11 +59,24 @@ class TreeSitterParser:
 
         self.build_path = (self.libs_dir / 'langs.so').absolute()
 
-
         self.language = None
         self.LANGUAGES: dict[str, Language] = {}
 
         self._setup_grammars()
+        self.parser = Parser()
+
+    def __getstate__(self):
+        # Copy the object's state from self.__dict__ which contains
+        # all our instance attributes. Always use the dict.copy()
+        # method to avoid modifying the original state.
+        state = self.__dict__.copy()
+        # Remove the unpicklable entries.
+        del state['parser']
+        return state
+
+    def __setstate__(self, state):
+        # Restore instance attributes (i.e., filename and lineno).
+        self.__dict__.update(state)
         self.parser = Parser()
 
     def _setup_grammars(self):
