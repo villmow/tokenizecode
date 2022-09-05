@@ -61,7 +61,6 @@ class TreeSitterParser:
 
         self.language = None
         self.LANGUAGES: dict[str, Language] = {}
-
         self._setup_grammars()
         self.parser = Parser()
 
@@ -72,11 +71,17 @@ class TreeSitterParser:
         state = self.__dict__.copy()
         # Remove the unpicklable entries.
         del state['parser']
+        del state['LANGUAGES']
+        del state['language']
         return state
 
     def __setstate__(self, state):
         # Restore instance attributes (i.e., filename and lineno).
         self.__dict__.update(state)
+
+        self.language = None
+        self.LANGUAGES: dict[str, Language] = {}
+        self._setup_grammars()
         self.parser = Parser()
 
     def _setup_grammars(self):
