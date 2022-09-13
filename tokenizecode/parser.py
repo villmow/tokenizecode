@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 from typing import Union, Optional, Iterable
 import warnings
@@ -23,17 +24,23 @@ from tokenizecode.point import Span, Point
 log = logging.getLogger(__name__)
 
 
-def download_grammar(language: str, directory: Path) -> Path:
+def download_grammar(language: str, directory: Path, sha: Optional[str] = None) -> Path:
+    # loads specific commit if sha is given, else current master
     import requests, zipfile, io
 
     log.info(f"Cloning grammar for language {language} to {directory}.")
-    url = f"https://github.com/tree-sitter/tree-sitter-{language}/archive/refs/heads/master.zip"
+    if sha is None:
+        url = f"https://github.com/tree-sitter/tree-sitter-{language}/archive/refs/heads/master.zip"
+        path = directory / f"tree-sitter-{language}-master"
+    else:
+        url = f"https://github.com/tree-sitter/tree-sitter-{language}/archive/{sha}.zip"
+        path = directory / f"tree-sitter-{language}-{sha}"
     r = requests.get(url)
     z = zipfile.ZipFile(io.BytesIO(r.content))
     z.extractall(directory.absolute())
 
-    path = directory / f"tree-sitter-{language}-master"
-    new_path = path.with_name(path.name.replace('-master', ''))
+    #path = directory / f"tree-sitter-{language}-master"
+    new_path = directory / f"tree-sitter-{language}"
 
     shutil.move(
         str(path.absolute()),
@@ -53,12 +60,12 @@ class TreeSitterParser:
         # 'agda', 'swift', 'verilog' currently bugged. see: https://github.com/tree-sitter/py-tree-sitter/issues/72
     }
 
-    def __init__(self, libs_dir: Optional[Path] = None):
+    def __init__(self, libs_dir: Optional[Path] = None, grammar_versions: Optional[dict] = {}):
         if libs_dir is None:
             self.libs_dir = get_project_root() / 'libs'
 
         self.build_path = (self.libs_dir / 'langs.so').absolute()
-
+        self.grammar_versions = {l:grammar_versions[l] if l in grammar_versions else None for l in self.supported_languages}
         self.language = None
         self.LANGUAGES: dict[str, Language] = {}
         self._setup_grammars()
@@ -90,15 +97,16 @@ class TreeSitterParser:
             return
 
         self.libs_dir.mkdir(parents=True, exist_ok=True)
+        pattern = '-\w{6,}(?!.*-)' # last alphanumeric string starting with '-' containing 6 or more characters
 
         downloaded_langs = {
-            d.name.replace('tree-sitter-', '').replace('-master', ''): d for d in self.libs_dir.iterdir()
+            re.sub(pattern, '', d.name.replace('tree-sitter-', '')): d for d in self.libs_dir.iterdir()
             if d.is_dir() if d.name.startswith('tree-sitter-')
         }
 
         did_download = False
         for language in (l for l in self.supported_languages if l not in downloaded_langs):
-            downloaded_langs[language] = download_grammar(language, self.libs_dir)
+            downloaded_langs[language] = download_grammar(language, self.libs_dir, self.grammar_versions[language])
             did_download = True
 
         # wait a little after downloading
@@ -375,3 +383,16 @@ class CodeParser:
 
     def pprint(self, tree: TensorTree) -> None:
         print(self.unparse(tree))
+
+# DEBUG remove me!
+
+java_code = """class HelloWorld {
+    public static void main(String[] args) {
+        System.out.println("Hello, World!"); 
+    }
+}"""
+
+#parser = CodeParser()
+parser = TreeSitterParser(grammar_versions={'haskell':'e30bdfd53eb28c73f26a68b77d436fd2140af167'})
+# returns a tensortree
+tree = parser.parse(java_code, "java")
