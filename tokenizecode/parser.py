@@ -25,22 +25,21 @@ log = logging.getLogger(__name__)
 
 
 def download_grammar(language: str, directory: Path, sha: Optional[str] = None) -> Path:
-    # loads specific commit if sha is given, else current master
+    # loads specific commit if sha is given, else current master branch
     import requests, zipfile, io
 
     log.info(f"Cloning grammar for language {language} to {directory}.")
     if sha is None:
         url = f"https://github.com/tree-sitter/tree-sitter-{language}/archive/refs/heads/master.zip"
         path = directory / f"tree-sitter-{language}-master"
+        new_path = directory / f"tree-sitter-{language}/master"
     else:
         url = f"https://github.com/tree-sitter/tree-sitter-{language}/archive/{sha}.zip"
         path = directory / f"tree-sitter-{language}-{sha}"
+        new_path = directory / f"tree-sitter-{language}/{sha}"
     r = requests.get(url)
     z = zipfile.ZipFile(io.BytesIO(r.content))
     z.extractall(directory.absolute())
-
-    #path = directory / f"tree-sitter-{language}-master"
-    new_path = directory / f"tree-sitter-{language}"
 
     shutil.move(
         str(path.absolute()),
@@ -91,20 +90,24 @@ class TreeSitterParser:
         self._setup_grammars()
         self.parser = Parser()
 
+
     def _setup_grammars(self):
         # build already. call reset
         if self.LANGUAGES:
             return
 
         self.libs_dir.mkdir(parents=True, exist_ok=True)
-        pattern = '-\w{6,}(?!.*-)' # last alphanumeric string starting with '-' containing 6 or more characters
 
-        downloaded_langs = {
-            re.sub(pattern, '', d.name.replace('tree-sitter-', '')): d for d in self.libs_dir.iterdir()
-            if d.is_dir() if d.name.startswith('tree-sitter-')
-        }
+        downloaded_langs = {}
+
+        for d in filter(lambda d: d.is_dir() and d.name.startswith('tree-sitter-'), self.libs_dir.iterdir()):
+            l = d.name.replace('tree-sitter-', '')
+            version = self.grammar_versions[l] or 'master'
+            if version in (subdir.name for subdir in d.iterdir()):
+                downloaded_langs[l] = d / version
 
         did_download = False
+  
         for language in (l for l in self.supported_languages if l not in downloaded_langs):
             downloaded_langs[language] = download_grammar(language, self.libs_dir, self.grammar_versions[language])
             did_download = True
@@ -393,6 +396,6 @@ java_code = """class HelloWorld {
 }"""
 
 #parser = CodeParser()
-parser = TreeSitterParser(grammar_versions={'haskell':'e30bdfd53eb28c73f26a68b77d436fd2140af167'})
+parser = TreeSitterParser(grammar_versions={'python': 'de221eccf9a221f5b85474a553474a69b4b5784d' }) #'haskell':'e30bdfd53eb28c73f26a68b77d436fd2140af167'})
 # returns a tensortree
 tree = parser.parse(java_code, "java")
