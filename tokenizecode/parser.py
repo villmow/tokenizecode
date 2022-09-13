@@ -386,16 +386,3 @@ class CodeParser:
 
     def pprint(self, tree: TensorTree) -> None:
         print(self.unparse(tree))
-
-# DEBUG remove me!
-
-java_code = """class HelloWorld {
-    public static void main(String[] args) {
-        System.out.println("Hello, World!"); 
-    }
-}"""
-
-#parser = CodeParser()
-parser = TreeSitterParser(grammar_versions={'python': 'de221eccf9a221f5b85474a553474a69b4b5784d' }) #'haskell':'e30bdfd53eb28c73f26a68b77d436fd2140af167'})
-# returns a tensortree
-tree = parser.parse(java_code, "java")
