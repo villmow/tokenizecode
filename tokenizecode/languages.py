@@ -8,13 +8,13 @@ log = logging.getLogger(__name__)
 
 # taken and adapted from https://github.com/blakeembrey/language-map/blob/master/languages.json
 LANGUAGE_MAP = {
-  "agda": {
-    "type": "programming",
-    "color": "#315665",
-    "extensions": {
-      ".agda"
-    },
-  },
+  # "agda": {
+  #   "type": "programming",
+  #   "color": "#315665",
+  #   "extensions": {
+  #     ".agda"
+  #   },
+  # },
   "c": {
     "type": "programming",
     "color": "#555555",
@@ -154,24 +154,24 @@ LANGUAGE_MAP = {
       "node"
     ],
   },
-  "json": {
-    "type": "data",
-    "extensions": {
-      ".json",
-      ".avsc",
-      ".geojson",
-      ".gltf",
-      ".JSON-tmLanguage",
-      ".jsonl",
-      ".tfstate",
-      ".tfstate.backup",
-      ".topojson",
-      ".webapp",
-      ".webmanifest",
-      ".yy",
-      ".yyp"
-    },
-  },
+  # "json": {
+  #   "type": "data",
+  #   "extensions": {
+  #     ".json",
+  #     ".avsc",
+  #     ".geojson",
+  #     ".gltf",
+  #     ".JSON-tmLanguage",
+  #     ".jsonl",
+  #     ".tfstate",
+  #     ".tfstate.backup",
+  #     ".topojson",
+  #     ".webapp",
+  #     ".webmanifest",
+  #     ".yy",
+  #     ".yyp"
+  #   },
+  # },
   "julia": {
     "type": "programming",
     "color": "#a270ba",
@@ -313,13 +313,13 @@ LANGUAGE_MAP = {
       "scala"
     ],
   },
-  "swift": {
-    "type": "programming",
-    "color": "#ffac45",
-    "extensions": {
-      ".swift"
-    },
-  },
+  # "swift": {
+  #   "type": "programming",
+  #   "color": "#ffac45",
+  #   "extensions": {
+  #     ".swift"
+  #   },
+  # },
   "typescript": {
     "type": "programming",
     "color": "#2b7489",
@@ -334,14 +334,14 @@ LANGUAGE_MAP = {
       ".tsx"
     },
   },
-  "verilog": {
-    "type": "programming",
-    "color": "#b2b7f8",
-    "extensions": {
-      ".v",
-      ".veo"
-    },
-  },
+  # "verilog": {
+  #   "type": "programming",
+  #   "color": "#b2b7f8",
+  #   "extensions": {
+  #     ".v",
+  #     ".veo"
+  #   },
+  # },
 }
 
 
@@ -367,6 +367,9 @@ ALIAS_TO_LANGUAGE = {
 
 def detect_lang(filepath: Path) -> Optional[str]:
     possible_langs = detect_langs(filepath)
+
+    if possible_langs is None:
+        return
 
     # just return the one we found
     if len(possible_langs) == 1:
