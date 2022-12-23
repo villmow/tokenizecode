@@ -239,9 +239,12 @@ class FullTraversal(TreeTraversal):
 
             if last_end_byte < node_start_byte:
                 text = code[last_end_byte:node_start_byte]
+                _last_end_point = last_end_point
+                _last_end_byte = last_end_byte
+
                 last_end_byte = node_start_byte
                 last_end_point = node_start_point
-                return text
+                return text, _last_end_point, _last_end_byte
 
         def add_node(text, span):
             nonlocal node_id, root
@@ -283,11 +286,12 @@ class FullTraversal(TreeTraversal):
         while not reached_root:
             code_between = text_between(cursor.node.start_byte, cursor.node.start_point)
             if code_between:
+                text, _last_end_point, _last_end_byte = code_between
                 code_span = Span(
-                    start_byte=last_end_byte, end_byte=cursor.node.start_byte,
-                    start_point=last_end_point, end_point=Point(*cursor.node.start_point)
+                    start_byte=_last_end_byte, end_byte=cursor.node.start_byte,
+                    start_point=_last_end_point, end_point=Point(*cursor.node.start_point)
                 )
-                yield add_node(code_between, code_span)
+                yield add_node(text, code_span)
 
             if cursor.node.is_named and not cursor.node.children:
                 node = to_node(cursor.node, read_text=False)
@@ -325,11 +329,12 @@ class FullTraversal(TreeTraversal):
 
         code_between = text_between(cursor.node.end_byte, cursor.node.end_point)
         if code_between:
+            text, _last_end_point, _last_end_byte = code_between
             code_between_span = Span(
-                start_byte=last_end_byte, end_byte=cursor.node.end_byte,
-                start_point=last_end_point, end_point=Point(*cursor.node.end_point)
+                start_byte=_last_end_byte, end_byte=cursor.node.end_byte,
+                start_point=_last_end_point, end_point=Point(*cursor.node.end_point)
             )
-            yield add_node(code_between, code_between_span)
+            yield add_node(text, code_between_span)
             root.descendants += 1
 
 
@@ -382,6 +387,8 @@ class CodeParser:
 
     @staticmethod
     def unparse(tree: TensorTree) -> str:
+        if isinstance(tree, CodeParsingOutput):
+            tree = tree.tree
         return "".join(tree.leaves())
 
     def pprint(self, tree: TensorTree) -> None:

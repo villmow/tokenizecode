@@ -1,10 +1,9 @@
 import unittest
 
-from tokenizecode import TreeSitterParser
-from tokenizecode.parser import to_tensortree, FullTraversal, CodeParser
+from tokenizecode.parser import to_tensortree, FullTraversal, CodeParser, TreeSitterParser
 
 import tensortree
-from codesamples import SAMPLE_CODE
+from .codesamples import SAMPLE_CODE
 
 
 def to_tensortree_without_descendants(nodes: list) -> tensortree.TensorTree:
@@ -105,17 +104,22 @@ class TestCodeParser(unittest.TestCase):
 
     def test_parsing_all(self):
         parser = CodeParser()
-
+        from tensortree.utils import replace_whitespace
         for language, code in SAMPLE_CODE.items():
             with self.subTest(f"Parsing {language}") as t:
-                tree = parser.parse(code, language)
+                output = parser.parse(code, language)
+                tree = output.tree
+                spans = output.positions
+
                 decoded_code = parser.unparse(tree)
-                tree.pprint()
+                tree.pprint(node_renderer=lambda node_idx, name: f"{replace_whitespace(name)} [({spans[node_idx].start_point.row};{spans[node_idx].start_point.column})->({spans[node_idx].end_point.row};{spans[node_idx].end_point.column})]")
+
                 if code != decoded_code:
+                    print('#' * 100)
                     print(code)
                     print()
                     print(decoded_code)
-                    tree.pprint()
+                    # tree.pprint()
                     print('#' * 100)
                 self.assertSequenceEqual(code, decoded_code)
 
