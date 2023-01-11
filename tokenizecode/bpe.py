@@ -248,7 +248,6 @@ class TokenizerBPE:
         encoded_nodes = self.tokenizer(tree.node_data, is_split_into_words=True).encodings[0]
         return self._encode_tree(tree, encoded_nodes)
 
-    # @timeout(seconds=50, use_signals=False)
     def encode_tree_batch(self, trees: list[TensorTreeWithStrings], max_encoded_nodes: Optional[int] = None) -> list[TensorTreeWithInts]:
         assert isinstance(trees[0].node_data[0], str), "tree should consist of strings"
         batch_of_node_data = [ tree.node_data for tree in trees]
@@ -274,7 +273,7 @@ class TokenizerBPE:
         log.info(f"--done applying bpe to {len(trees)} trees in {dur1:.02f}/{dur2:.02f} ({(dur2 + dur1) / len(trees):.2f}/sample)")
 
         return res
-    # @timeoutable
+
     def _encode_tree(self, tree: TensorTreeWithStrings, encoded_node: tokenizers.Encoding) -> TensorTreeWithInts:
         """ Produces a tree with IDs and artificial BPE nodes. """
 
