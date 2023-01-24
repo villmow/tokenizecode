@@ -243,10 +243,11 @@ class TokenizerBPE:
         out = self.tokenizer.decode(ids)
         return out
 
-    def encode_tree(self, tree: TensorTreeWithStrings) -> TensorTreeWithInts:
+    def encode_tree(self, tree: TensorTreeWithStrings, num_tries: int = 0) -> TensorTreeWithInts:
         assert isinstance(tree.node_data[0], str), "tree should consist of strings"
         encoded_nodes = self.tokenizer(tree.node_data, is_split_into_words=True).encodings[0]
-        return self._encode_tree(tree, encoded_nodes)
+        result = self._encode_tree(tree, encoded_nodes, num_tries=num_tries)
+        return result
 
     def encode_tree_batch(self, trees: list[TensorTreeWithStrings], max_encoded_nodes: Optional[int] = None) -> list[TensorTreeWithInts]:
         assert isinstance(trees[0].node_data[0], str), "tree should consist of strings"
@@ -274,7 +275,7 @@ class TokenizerBPE:
 
         return res
 
-    def _encode_tree(self, tree: TensorTreeWithStrings, encoded_node: tokenizers.Encoding) -> TensorTreeWithInts:
+    def _encode_tree(self, tree: TensorTreeWithStrings, encoded_node: tokenizers.Encoding, num_tries: int = 0) -> TensorTreeWithInts:
         """ Produces a tree with IDs and artificial BPE nodes. """
 
         # compute final amount of nodes
@@ -317,11 +318,18 @@ class TokenizerBPE:
 
                 if word_ids[idx_encoded_node] == word_ids[idx_encoded_node + 1]:
                     log.error(f"Detected splitted nonterminal: {tree.get_node_data(old_node_idx)}")
+                  
 
                     # splitted_nonterminals
                     end_idx = idx_encoded_node + 1
+                    num_iterations = 0
                     while word_ids[end_idx] == word_ids[end_idx + 1]:
                         end_idx += 1
+                        num_iterations += 1
+
+                        if num_iterations > 10000:
+                            raise ValueError("Maximum amount of tries exceeded") 
+
                     end_idx += 1
                     splitted_tokens = encoded_node.tokens[idx_encoded_node: end_idx]
                     log.error(f"Nonterminal was split into: {splitted_tokens}. Will be set to [UNK].")
@@ -347,9 +355,12 @@ class TokenizerBPE:
                 _add_next_token()
             elif not tree.get_node_data(old_node_idx):
                 # this is bad and should not happen.
-                # log.warning("Empty node detected. Will delete empty node and restart.")
+                if num_tries > 50:
+                    raise ValueError("Maximum amount of tries exceeded")
+
+                log.debug("Empty node detected. Will delete empty node and restart.")
                 new_tree = tree.delete_node(old_node_idx)
-                return self.encode_tree(new_tree)
+                return self.encode_tree(new_tree, num_tries=num_tries+1)
 
             # Leaf, which has been splitted
             elif (idx_encoded_node + 1) < len(word_ids) and (word_ids[idx_encoded_node] == word_ids[idx_encoded_node + 1]):
@@ -359,6 +370,7 @@ class TokenizerBPE:
                 # add BPE nonterminal
                 _add_next_token(self.bpe_nonterminal_id, parent_added=True)
 
+                num_iterations = 0
                 # add every subword, but the last
                 while (
                         (idx_encoded_node + 1) < len(word_ids)
@@ -366,6 +378,10 @@ class TokenizerBPE:
                 ):
                     _add_next_token(parent_added=False)
                     num_new_tokens_for_leaf += 1
+                    
+                    num_iterations += 1
+                    if num_iterations > 10000:
+                        raise ValueError("Maximum amount of tries exceeded")
 
                 # add last subword
                 _add_next_token(parent_added=False)

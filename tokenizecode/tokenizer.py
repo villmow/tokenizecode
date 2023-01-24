@@ -16,7 +16,6 @@ from tokenizecode.utils import TensorTreeWithStrings, TensorTreeWithInts, is_tre
 DEFAULT_TOKENIZER_BPE = get_project_root() / "trained_tokenizers/20211108_bpe30k-fpl40k-with-nonterminals.json"
 
 
-
 @dataclass
 class TokenizedCodeOutput(CodeParsingOutput):
     tree: TensorTreeWithInts  # just changing the type
