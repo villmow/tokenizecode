@@ -1,4 +1,4 @@
-from .utils import get_project_root
+from .utils import get_project_root, adjust_positions
 from .parser import CodeParser, CodeParsingOutput
 from .tokenizer import CodeTokenizer
 from .bpe import SentencePieceBPE, TokenizerBPE

@@ -75,6 +75,134 @@ class TestWrapper(unittest.TestCase):
 
         # check that position mapping is the same
         self.assertListEqual(p1, p2)
+
+    def test_parse_wrapped_class2(self) -> None:
+        # some code that appears inside a function in java
+        java_code_from_inside_class = """public function getName() {
+    $this->incrementNameCalled();
+    return $this->_getName();
+}
+protected function _getName() {
+    return $this->name;
+}"""
+
+        # check that this code cant be parsed by the default parser
+        parser = CodeParser()
+        parsing_original = parser.parse(java_code_from_inside_class, "java")
+        # parsing_original.tree.pprint()
+        self.assertGreater(parsing_original.num_errors, 0, "this code should not be parsable by the default parser")
+
+        wrapped_parser = WrappedParser(parser)
+        parsing_wrapped, method = wrapped_parser.parse(java_code_from_inside_class, "java")
+        print(method)
+        # parsing_wrapped.tree.pprint()
+        self.assertEqual(parsing_wrapped.num_errors, 0, "this code should be parsable by the wrapped parser")
+        # check that the tree is the same
+        # self.assertTreeEqual(parsing_original.tree, parsing_wrapped.tree)
+
+        p1 = parsing_original.positions
+        p2 = parsing_wrapped.positions
+
+        p1 = [pos for i, pos in enumerate(parsing_original.positions) if parsing_original.tree.is_leaf(i) and parsing_original.tree.get_node_data(i) != ""]
+        p2 = [pos for i, pos in enumerate(parsing_wrapped.positions) if parsing_wrapped.tree.is_leaf(i) and parsing_wrapped.tree.get_node_data(i) != ""]
+
+        l1  = parsing_original.tree.leaves()
+        l1 = list(filter(lambda x: x != "", l1))
+        l2 = parsing_wrapped.tree.leaves()
+        l2 = list(filter(lambda x: x != "", l2))
+
+        self.assertListEqual(l1, l2)
+
+        # check that position mapping is the same
+        self.assertListEqual(p1, p2)
+
+        # check that start byte is greater or equal to 0 for all positions
+        self.assertTrue(all(pos.start_byte >= 0 for pos in parsing_wrapped.positions))
+
+    def test_parse_wrapped_class3(self) -> None:
+        # some code that appears inside a function in java
+        java_code_from_inside_class = """public enum IMType implements CodeableEnum {
+    
+    public IMType getByCode(String code) {
+        return (IMType)CodeableEnumHelper.getByCode(code, this.values());
+    } 
+}"""
+
+        # check that this code cant be parsed by the default parser
+        parser = CodeParser()
+        parsing_original = parser.parse(java_code_from_inside_class, "java")
+        # parsing_original.tree.pprint()
+        self.assertGreater(parsing_original.num_errors, 0, "this code should not be parsable by the default parser")
+
+        wrapped_parser = WrappedParser(parser)
+        parsing_wrapped, method = wrapped_parser.parse(java_code_from_inside_class, "java")
+        print(method)
+        # parsing_wrapped.tree.pprint()
+        self.assertEqual(parsing_wrapped.num_errors, 0, "this code should be parsable by the wrapped parser")
+        # check that the tree is the same
+        # self.assertTreeEqual(parsing_original.tree, parsing_wrapped.tree)
+
+        p1 = parsing_original.positions
+        p2 = parsing_wrapped.positions
+
+        p1 = [pos for i, pos in enumerate(parsing_original.positions) if parsing_original.tree.is_leaf(i) and parsing_original.tree.get_node_data(i) != ""]
+        p2 = [pos for i, pos in enumerate(parsing_wrapped.positions) if parsing_wrapped.tree.is_leaf(i) and parsing_wrapped.tree.get_node_data(i) != ""]
+
+        l1  = parsing_original.tree.leaves()
+        l1 = list(filter(lambda x: x != "", l1))
+        l2 = parsing_wrapped.tree.leaves()
+        l2 = list(filter(lambda x: x != "", l2))
+
+        self.assertListEqual(l1, l2)
+
+        # check that position mapping is the same
+        self.assertListEqual(p1, p2)
+
+        # check that start byte is greater or equal to 0 for all positions
+        self.assertTrue(all(pos.start_byte >= 0 for pos in parsing_wrapped.positions))
+
+    def test_parse_wrapped_class4(self) -> None:
+        # some code that appears inside a function in java
+        java_code_from_inside_class = """void onDraw() {
+  
+  synchronized (stick) {
+    stick.notify();
+  }
+} // end onDraw()"""
+
+        # check that this code cant be parsed by the default parser
+        parser = CodeParser()
+        parsing_original = parser.parse(java_code_from_inside_class, "java")
+        # parsing_original.tree.pprint()
+        self.assertGreater(parsing_original.num_errors, 0, "this code should not be parsable by the default parser")
+
+        wrapped_parser = WrappedParser(parser)
+        parsing_wrapped, method = wrapped_parser.parse(java_code_from_inside_class, "java")
+        print(method)
+        # parsing_wrapped.tree.pprint()
+        self.assertEqual(parsing_wrapped.num_errors, 0, "this code should be parsable by the wrapped parser")
+        # check that the tree is the same
+        # self.assertTreeEqual(parsing_original.tree, parsing_wrapped.tree)
+
+        p1 = parsing_original.positions
+        p2 = parsing_wrapped.positions
+
+        p1 = [pos for i, pos in enumerate(parsing_original.positions) if parsing_original.tree.is_leaf(i) and parsing_original.tree.get_node_data(i) != ""]
+        p2 = [pos for i, pos in enumerate(parsing_wrapped.positions) if parsing_wrapped.tree.is_leaf(i) and parsing_wrapped.tree.get_node_data(i) != ""]
+
+        l1  = parsing_original.tree.leaves()
+        l1 = list(filter(lambda x: x != "", l1))
+        l2 = parsing_wrapped.tree.leaves()
+        l2 = list(filter(lambda x: x != "", l2))
+
+        self.assertListEqual(l1, l2)
+
+        # check that position mapping is the same
+        self.assertListEqual(p1, p2)
+
+        # check that start byte is greater or equal to 0 for all positions
+        self.assertTrue(all(pos.start_byte >= 0 for pos in parsing_wrapped.positions))
+
     def test_parse_wrapped_method(self) -> None:
         # some code that appears inside a function in java
         java_code_from_inside_method = "Result4 = A + B + C + D + A*B + A*C + A*D + B*C + B*D + C*D\n        + A*B*C + A*B*D + A*C*D + B*C*D + A*B*C*D\n        =      A + B + C + A*B + A*C + B*C + A*B*C\n        + (1 + A + B + C + A*B + A*C + B*C + A*B*C) * D\n        = Result3 + (1 + Result3) * D"

@@ -318,7 +318,6 @@ class TokenizerBPE:
 
                 if word_ids[idx_encoded_node] == word_ids[idx_encoded_node + 1]:
                     log.error(f"Detected splitted nonterminal: {tree.get_node_data(old_node_idx)}")
-                  
 
                     # splitted_nonterminals
                     end_idx = idx_encoded_node + 1

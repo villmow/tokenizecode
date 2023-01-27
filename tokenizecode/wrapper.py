@@ -23,6 +23,8 @@ class WrappedParser:
     def parse(self, code: str, language: str, name: Optional[str] = None) -> Union[CodeParsingOutput, tuple[CodeParsingOutput, str]]:
         if name is None:
             return self._parse_min_errors(code, language)
+        elif name == "none":
+            return self.parser.parse(code, language)
         else:
             wrapper = getattr(self, f"wrap_{name}")
             unwrapper = getattr(self, f"unwrap_{name}")
@@ -54,7 +56,7 @@ class WrappedParser:
         if parsing_output.tree.get_node_data(0) == "[ERROR]":
             # then we cant unwrap
             return parsing_output
-        tree = parsing_output.tree[26]
+        tree = parsing_output.tree[26].detach()
 
         if tree.get_node_data(0) != "[block]":
             # then we cant unwrap
@@ -114,7 +116,7 @@ class WrappedParser:
 
     @staticmethod
     def wrap_java_inside_class(code: str) -> str:
-        return "public class Wrapper {" + f"{code}" + "}"
+        return "public class Wrapper {" + f"{code}" + "\n}"
 
     @staticmethod
     def unwrap_java_inside_class(parsing_output: CodeParsingOutput) -> CodeParsingOutput:
@@ -141,15 +143,17 @@ class WrappedParser:
             print("no nodes to remove")
             parsing_output.tree.pprint()
 
-        parsing_output.tree = tree
+        # remove \n from the end
+        tree.node_data[-1] = tree.node_data[-1][:-1]
 
+        parsing_output.tree = tree
         num_bytes_added_before = parsing_output.positions[10].start_byte
-        num_bytes_added_before += 1  # for the {
 
         # todo remove the added positions
         new_positions = []
         for i, position in enumerate(parsing_output.positions[10:-1]):
             if i == 1:
+                num_bytes_added_before += 1  # for the {
                 continue  # the added bracket {
 
             new_position = Span(
@@ -174,6 +178,18 @@ class WrappedParser:
             )
 
             new_positions.append(new_position)
+
+        # remove the last \n
+        last_span = new_positions[-1]
+        new_positions[-1] = Span(
+            start_byte=last_span.start_byte,
+            end_byte=last_span.end_byte - 1,
+            start_point=last_span.start_point,
+            end_point=Point(
+                row=last_span.end_point.row - 1,
+                column=last_span.end_point.column,
+            ),
+        )
 
         parsing_output.positions = new_positions
         return parsing_output
