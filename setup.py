@@ -21,6 +21,7 @@ setup(name='tokenizecode',
             "python-magic",
             "tensortree",
             "tokenizers",
+            "transformers",
       ],
       keywords=['source code', 'tokenization', 'parsing', 'code parser'],  # Keywords that define your package best
       classifiers=[
