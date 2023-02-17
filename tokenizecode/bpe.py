@@ -317,7 +317,7 @@ class TokenizerBPE:
                 # Nonterminals -> are encoded as special symbols and should have been never splitted by the tokenizer
 
                 if word_ids[idx_encoded_node] == word_ids[idx_encoded_node + 1]:
-                    log.error(f"Detected splitted nonterminal: {tree.get_node_data(old_node_idx)}")
+                    log.debug(f"Detected splitted nonterminal: {tree.get_node_data(old_node_idx)}")
 
                     # splitted_nonterminals
                     end_idx = idx_encoded_node + 1
@@ -331,7 +331,7 @@ class TokenizerBPE:
 
                     end_idx += 1
                     splitted_tokens = encoded_node.tokens[idx_encoded_node: end_idx]
-                    log.error(f"Nonterminal was split into: {splitted_tokens}. Will be set to [UNK].")
+                    log.debug(f"Nonterminal was split into: {splitted_tokens}. Will be set to [UNK].")
 
                     _add_next_token(token=self.tokenizer.convert_tokens_to_ids("[UNK]"), parent_added=True)
                     idx_encoded_node = end_idx
