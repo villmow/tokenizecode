@@ -59,12 +59,13 @@ class TreeSitterParser:
         # 'agda', 'swift', 'verilog' currently bugged. see: https://github.com/tree-sitter/py-tree-sitter/issues/72
     }
 
-    def __init__(self, libs_dir: Optional[Path] = None, grammar_versions: Optional[dict] = {}):
+    def __init__(self, libs_dir: Optional[Path] = None, grammar_versions: Optional[dict] = None):
         if libs_dir is None:
             self.libs_dir = get_project_root() / 'libs'
 
+        self.grammar_versions = grammar_versions if grammar_versions is not None else {}
         self.build_path = (self.libs_dir / 'langs.so').absolute()
-        self.grammar_versions = {l:grammar_versions[l] if l in grammar_versions else None for l in self.supported_languages}
+        self.grammar_versions = {l:self.grammar_versions[l] if l in self.grammar_versions else None for l in self.supported_languages}
         self.language = None
         self.LANGUAGES: dict[str, Language] = {}
         self._setup_grammars()
@@ -89,7 +90,6 @@ class TreeSitterParser:
         self.LANGUAGES: dict[str, Language] = {}
         self._setup_grammars()
         self.parser = Parser()
-
 
     def _setup_grammars(self):
         # build already. call reset
