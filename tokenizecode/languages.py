@@ -343,6 +343,7 @@ LANGUAGE_MAP = {
   #   },
   # },
 }
+LANGUAGES = list(LANGUAGE_MAP.keys())
 
 
 def languages_for_extension(language_map: dict[str, dict[str, str]]) -> dict[str, list[str]]:
