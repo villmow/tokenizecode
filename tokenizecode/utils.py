@@ -72,7 +72,7 @@ def adjust_positions(tree1: TensorTreeWithStrings, tree2: TensorTreeWithInts, po
             old_idx += 1
         elif node_idx > 0 and tree2.get_node_data(tree2.get_parent(node_idx)) == bpe_id:
             # at subword for which we dont have a span
-            span = None
+            span = result[-1]
         else:
             span = positions[old_idx]
             old_idx += 1
