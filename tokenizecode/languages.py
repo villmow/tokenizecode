@@ -373,10 +373,10 @@ def detect_lang(filepath: Path) -> Optional[str]:
         return
 
     # just return the one we found
-    if len(possible_langs) == 1:
-        return possible_langs[0]
-    else:
-        log.info(f"{filepath}  belongs to multiple languages: {possible_langs}.")
+    if len(possible_langs) > 1:
+        log.warning(f"{filepath}  belongs to multiple languages: {possible_langs}. Using first one.")
+
+    return possible_langs[0]
 
 
 def detect_langs(filepath: Path) -> Optional[list[str]]:
