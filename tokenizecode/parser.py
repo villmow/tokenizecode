@@ -29,12 +29,23 @@ def download_grammar(language: str, directory: Path, sha: Optional[str] = None) 
     import requests, zipfile, io
 
     log.info(f"Cloning grammar for language {language} to {directory}.")
-    if sha is None:
-        url = f"https://github.com/tree-sitter/tree-sitter-{language}/archive/refs/heads/master.zip"
+
+    url = f"https://github.com/tree-sitter/tree-sitter-{language}/archive"
+
+    # kotlin parser is not in the tree-sitter org
+    if language == "kotlin":
+        url = f"https://github.com/fwcd/tree-sitter-kotlin/archive"
+
+    if sha is None and language != "kotlin":
+        url += "/refs/heads/master.zip"
         path = directory / f"tree-sitter-{language}-master"
         new_path = directory / f"tree-sitter-{language}/master"
+    elif sha is None and language == "kotlin":
+        url += "/refs/heads/main.zip"
+        path = directory / f"tree-sitter-kotlin-main"
+        new_path = directory / f"tree-sitter-{language}/master"
     else:
-        url = f"https://github.com/tree-sitter/tree-sitter-{language}/archive/{sha}.zip"
+        url += f"/{sha}.zip"
         path = directory / f"tree-sitter-{language}-{sha}"
         new_path = directory / f"tree-sitter-{language}/{sha}"
     r = requests.get(url)
@@ -51,21 +62,43 @@ def download_grammar(language: str, directory: Path, sha: Optional[str] = None) 
 
 
 class TreeSitterParser:
-    """ A treesitter code parser that magically downloads and initializes itself"""
+    """A treesitter code parser that magically downloads and initializes itself"""
+
     supported_languages: set[str] = {
-        'c', 'cpp', 'css', 'c-sharp', 'haskell', 'html', 'go',
-        'java', 'javascript', 'json', 'julia', 'ocaml', 'php', 'python',
-        'ruby', 'rust', 'scala', 'typescript',
+        "c",
+        "cpp",
+        "css",
+        "c-sharp",
+        "haskell",
+        "html",
+        "go",
+        "java",
+        "javascript",
+        "json",
+        "julia",
+        "kotlin",
+        "ocaml",
+        "php",
+        "python",
+        "ruby",
+        "rust",
+        "scala",
+        "typescript",
         # 'agda', 'swift', 'verilog' currently bugged. see: https://github.com/tree-sitter/py-tree-sitter/issues/72
     }
 
-    def __init__(self, libs_dir: Optional[Path] = None, grammar_versions: Optional[dict] = None):
+    def __init__(
+        self, libs_dir: Optional[Path] = None, grammar_versions: Optional[dict] = None
+    ):
         if libs_dir is None:
-            self.libs_dir = get_project_root() / 'libs'
+            self.libs_dir = get_project_root() / "libs"
 
         self.grammar_versions = grammar_versions if grammar_versions is not None else {}
-        self.build_path = (self.libs_dir / 'langs.so').absolute()
-        self.grammar_versions = {l:self.grammar_versions[l] if l in self.grammar_versions else None for l in self.supported_languages}
+        self.build_path = (self.libs_dir / "langs.so").absolute()
+        self.grammar_versions = {
+            l: self.grammar_versions[l] if l in self.grammar_versions else None
+            for l in self.supported_languages
+        }
         self.language = None
         self.LANGUAGES: dict[str, Language] = {}
         self._setup_grammars()
@@ -77,9 +110,9 @@ class TreeSitterParser:
         # method to avoid modifying the original state.
         state = self.__dict__.copy()
         # Remove the unpicklable entries.
-        del state['parser']
-        del state['LANGUAGES']
-        del state['language']
+        del state["parser"]
+        del state["LANGUAGES"]
+        del state["language"]
         return state
 
     def __setstate__(self, state):
@@ -100,16 +133,23 @@ class TreeSitterParser:
 
         downloaded_langs = {}
 
-        for d in filter(lambda d: d.is_dir() and d.name.startswith('tree-sitter-'), self.libs_dir.iterdir()):
-            l = d.name.replace('tree-sitter-', '')
-            version = self.grammar_versions[l] or 'master'
+        for d in filter(
+            lambda d: d.is_dir() and d.name.startswith("tree-sitter-"),
+            self.libs_dir.iterdir(),
+        ):
+            l = d.name.replace("tree-sitter-", "")
+            version = self.grammar_versions[l] or "master"
             if version in (subdir.name for subdir in d.iterdir()):
                 downloaded_langs[l] = d / version
 
         did_download = False
-  
-        for language in (l for l in self.supported_languages if l not in downloaded_langs):
-            downloaded_langs[language] = download_grammar(language, self.libs_dir, self.grammar_versions[language])
+
+        for language in (
+            l for l in self.supported_languages if l not in downloaded_langs
+        ):
+            downloaded_langs[language] = download_grammar(
+                language, self.libs_dir, self.grammar_versions[language]
+            )
             did_download = True
 
         # wait a little after downloading
@@ -142,7 +182,7 @@ class TreeSitterParser:
         self.LANGUAGES = {}
         for lang in downloaded_langs:
             try:
-                ts_language = Language(build_path, lang.replace('-', '_'))
+                ts_language = Language(build_path, lang.replace("-", "_"))
                 self.LANGUAGES[lang] = ts_language
             except AttributeError as e:
                 print(e)
@@ -157,6 +197,7 @@ class TreeSitterParser:
     def reset(self, reload_all: bool = False):
         if reload_all and self.libs_dir.exists():
             import shutil
+
             shutil.rmtree(self.libs_dir)
 
         self.LANGUAGES = {}
@@ -177,7 +218,8 @@ class TreeSitterParser:
 
 @dataclass
 class _TmpNode:
-    """ Helper during parsing. """
+    """Helper during parsing."""
+
     id_: int
     text: str
     parent_id: int
@@ -187,11 +229,11 @@ class _TmpNode:
 
     def __post_init__(self):
         if isinstance(self.text, bytes):
-            self.text = self.text.decode('utf-8')
+            self.text = self.text.decode("utf-8")
 
 
 class TreeTraversal:
-    """ Implement a call method, that takes code and a treesitter and produces an iterable of nodes."""
+    """Implement a call method, that takes code and a treesitter and produces an iterable of nodes."""
 
     def __init__(self):
         self.errors = 0  # number of errors in last traversal
@@ -201,7 +243,6 @@ class TreeTraversal:
 
 
 class FullTraversal(TreeTraversal):
-
     def __call__(self, code: str, tree: tree_sitter.Tree) -> Iterable[_TmpNode]:
         self.errors = 0  # will be incremented in traverse
 
@@ -214,10 +255,10 @@ class FullTraversal(TreeTraversal):
         return nodes
 
     def traverse_tree(self, code: str, tree: tree_sitter.Tree):
-        """ Fuck, this code is a mess... but it magically works."""
+        """Fuck, this code is a mess... but it magically works."""
 
         if isinstance(code, str):
-            code = code.encode('utf-8')
+            code = code.encode("utf-8")
 
         cursor = tree.walk()
 
@@ -262,7 +303,9 @@ class FullTraversal(TreeTraversal):
             if text == "[ERROR]":
                 self.errors += 1
 
-            node = _TmpNode(id_=node_id, text=text, parent_id=parent_id, descendants=0, span=span)
+            node = _TmpNode(
+                id_=node_id, text=text, parent_id=parent_id, descendants=0, span=span
+            )
 
             if parent_id == -1:
                 root = node
@@ -272,9 +315,15 @@ class FullTraversal(TreeTraversal):
         def to_node(node, read_text: bool):
             nonlocal last_end_byte, last_end_point
 
-            span = Span(start_byte=node.start_byte, end_byte=node.end_byte,
-                        start_point=Point(*node.start_point), end_point=Point(*node.end_point))
-            text = code[span.start_byte:span.end_byte] if read_text else f"[{node.type}]"
+            span = Span(
+                start_byte=node.start_byte,
+                end_byte=node.end_byte,
+                start_point=Point(*node.start_point),
+                end_point=Point(*node.end_point),
+            )
+            text = (
+                code[span.start_byte : span.end_byte] if read_text else f"[{node.type}]"
+            )
             node = add_node(text, span)
 
             if read_text:
@@ -288,8 +337,10 @@ class FullTraversal(TreeTraversal):
             if code_between:
                 text, _last_end_point, _last_end_byte = code_between
                 code_span = Span(
-                    start_byte=_last_end_byte, end_byte=cursor.node.start_byte,
-                    start_point=_last_end_point, end_point=Point(*cursor.node.start_point)
+                    start_byte=_last_end_byte,
+                    end_byte=cursor.node.start_byte,
+                    start_point=_last_end_point,
+                    end_point=Point(*cursor.node.start_point),
                 )
                 yield add_node(text, code_span)
 
@@ -331,8 +382,10 @@ class FullTraversal(TreeTraversal):
         if code_between:
             text, _last_end_point, _last_end_byte = code_between
             code_between_span = Span(
-                start_byte=_last_end_byte, end_byte=cursor.node.end_byte,
-                start_point=_last_end_point, end_point=Point(*cursor.node.end_point)
+                start_byte=_last_end_byte,
+                end_byte=cursor.node.end_byte,
+                start_point=_last_end_point,
+                end_point=Point(*cursor.node.end_point),
             )
             yield add_node(text, code_between_span)
             root.descendants += 1

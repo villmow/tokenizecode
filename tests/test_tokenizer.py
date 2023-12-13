@@ -21,18 +21,11 @@ def get_sample_idx(repo, path):
 
 
 class TestTokenizer(unittest.TestCase):
-
-    def assertTreeEqual(self, tree1: TensorTree, tree2: TensorTree, msg = ...) -> None:
+    def assertTreeEqual(self, tree1: TensorTree, tree2: TensorTree, msg=...) -> None:
         self.assertListEqual(
-            tree1.descendants.tolist(),
-            tree2.descendants.tolist(),
-            msg
+            tree1.descendants.tolist(), tree2.descendants.tolist(), msg
         )
-        self.assertListEqual(
-            tree1.parents.tolist(),
-            tree2.parents.tolist(),
-            msg
-        )
+        self.assertListEqual(tree1.parents.tolist(), tree2.parents.tolist(), msg)
 
         n1 = tree1.node_data
         n2 = tree2.node_data
@@ -74,11 +67,14 @@ class TestTokenizer(unittest.TestCase):
 
     def test_encode_weird_sample(self) -> None:
         from multicoder.utils import to_tree
+
         sample = DATASET[36135]
         tree = to_tree(sample)
 
         # tokenizer = CodeTokenizer.from_file("/home/johannes/projects/tokenizecode/trained_tokenizers/20211108_bpe20k-fpl40k.json")
-        tokenizer = CodeTokenizer.from_file("/home/johannes/projects/multicoder/tokenizer/20211108_bpe30k-fpl40k-with-nonterminals.json")
+        tokenizer = CodeTokenizer.from_file(
+            "/home/johannes/projects/multicoder/tokenizer/20211108_bpe30k-fpl40k-with-nonterminals.json"
+        )
         # tokenizer = CodeTokenizer.from_file("/home/johannes/projects/multicoder/my_bpe_on_dataset4.json")
         print(sample["repository"])
         print(sample["path"])
@@ -91,6 +87,7 @@ class TestTokenizer(unittest.TestCase):
 
     def test_encode_weird_sample2(self) -> None:
         from multicoder.utils import to_tree
+
         repo = "microsoft/vscode"
         path = "vscode-main/src/vs/workbench/contrib/codeEditor/browser/quickaccess/gotoSymbolQuickAccess.ts"
         idx = 36136
@@ -103,7 +100,9 @@ class TestTokenizer(unittest.TestCase):
         tree = to_tree(sample)
 
         # tokenizer = CodeTokenizer.from_file("/home/johannes/projects/tokenizecode/trained_tokenizers/20211108_bpe20k-fpl40k.json")
-        tokenizer = CodeTokenizer.from_file("/home/johannes/projects/multicoder/tokenizer/20211108_bpe30k-fpl40k-with-nonterminals.json")
+        tokenizer = CodeTokenizer.from_file(
+            "/home/johannes/projects/multicoder/tokenizer/20211108_bpe30k-fpl40k-with-nonterminals.json"
+        )
         # tokenizer = CodeTokenizer.from_file("/home/johannes/projects/multicoder/my_bpe_on_dataset4.json")
         print(sample["repository"])
         print(sample["path"])
@@ -115,9 +114,9 @@ class TestTokenizer(unittest.TestCase):
         # code_decoded = tokenizer.decode(code_encoding.ids)
         # self.assertSequenceEqual(code, code_decoded)
 
-
     def test_encode_weird_sample3(self) -> None:
         from multicoder.utils import to_tree
+
         repo = "tensorflow/tensorflow"
         path = "tensorflow-master/tensorflow/core/tfrt/eager/tfrt_context.cc"
         idx = 14454
@@ -130,7 +129,9 @@ class TestTokenizer(unittest.TestCase):
         tree = to_tree(sample)
 
         # tokenizer = CodeTokenizer.from_file("/home/johannes/projects/tokenizecode/trained_tokenizers/20211108_bpe20k-fpl40k.json")
-        tokenizer = CodeTokenizer.from_file("/home/johannes/projects/multicoder/tokenizer/20211108_bpe30k-fpl40k-with-nonterminals.json")
+        tokenizer = CodeTokenizer.from_file(
+            "/home/johannes/projects/multicoder/tokenizer/20211108_bpe30k-fpl40k-with-nonterminals.json"
+        )
         # tokenizer = CodeTokenizer.from_file("/home/johannes/projects/multicoder/my_bpe_on_dataset4.json")
         print(sample["repository"])
         print(sample["path"])
@@ -151,8 +152,12 @@ class TestTokenizer(unittest.TestCase):
         tree = tokenizer.parse(code, language)
         code_encoding_with_tree = tokenizer.encode(tree)
         code_encoding_without_tree = tokenizer.encode(code, language)
-        self.assertSequenceEqual(code_encoding_without_tree.tokens, code_encoding_with_tree.tokens)
-        self.assertSequenceEqual(code_encoding_without_tree.ids, code_encoding_with_tree.ids)
+        self.assertSequenceEqual(
+            code_encoding_without_tree.tokens, code_encoding_with_tree.tokens
+        )
+        self.assertSequenceEqual(
+            code_encoding_without_tree.ids, code_encoding_with_tree.ids
+        )
 
         code_decoded = tokenizer.decode(code_encoding_with_tree.ids)
         self.assertSequenceEqual(code, code_decoded)
@@ -188,6 +193,7 @@ class TestTokenizer(unittest.TestCase):
 
     def test_encode_gpt2(self) -> None:
         from multicoder.utils import to_tree
+
         tokenizer = load_gpt2_tokenizer()
 
         for i, sample in enumerate(DATASET.shuffle(42)):
@@ -208,9 +214,9 @@ class TestTokenizer(unittest.TestCase):
                 break
                 # tokenizer.decode_tree(code_encoding, keep_bpe=True).pprint()
 
-
     def test_encode_all(self) -> None:
         from multicoder.utils import to_tree
+
         tokenizer = CodeTokenizer()
 
         for i, sample in enumerate(DATASET.shuffle(42)):
@@ -231,13 +237,13 @@ class TestTokenizer(unittest.TestCase):
                 # tokenizer.decode_tree(code_encoding, keep_bpe=True).pprint()
 
 
-
 import json
 
 
 def create_gpt2_tokenizer():
     from transformers import PreTrainedTokenizerFast
     from tokenizecode.bpe import TokenizerBPE
+
     bpe = PreTrainedTokenizerFast.from_pretrained(
         "gpt2",
         add_prefix_space=True,
@@ -245,14 +251,20 @@ def create_gpt2_tokenizer():
         unk_token="[UNK]",
         bos_token="[CLS]",
         eos_token="[EOS]",
-        model_max_len=1024
+        model_max_len=1024,
     )
 
     import json
-    with open("/home/johannes/projects/multicoder/tokenizer/nonterminals.json", "rt") as f:
+
+    with open(
+        "/home/johannes/projects/multicoder/tokenizer/nonterminals.json", "rt"
+    ) as f:
         nonterminals = json.load(f)
 
-    added = bpe.add_tokens(new_tokens=["[MASK]", "[BPE]", "        ", "    ", "  ", " ", "\n\n", "\n"], special_tokens=True)
+    added = bpe.add_tokens(
+        new_tokens=["[MASK]", "[BPE]", "        ", "    ", "  ", " ", "\n\n", "\n"],
+        special_tokens=True,
+    )
     added = bpe.add_tokens(new_tokens=list(nonterminals.keys()), special_tokens=True)
 
     bpe.save_pretrained("tokenizer")
@@ -263,22 +275,18 @@ def create_gpt2_tokenizer():
     return tokenizer
 
 
-
 def load_gpt2_tokenizer():
     create_gpt2_tokenizer()
 
     from transformers import PreTrainedTokenizerFast
     from tokenizecode.bpe import TokenizerBPE
 
-    bpe = PreTrainedTokenizerFast.from_pretrained("tokenizer",         model_max_len=1024)
+    bpe = PreTrainedTokenizerFast.from_pretrained("tokenizer", model_max_len=1024)
     print(bpe)
 
     tokenizer = CodeTokenizer(TokenizerBPE(bpe))
     return tokenizer
 
 
-
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

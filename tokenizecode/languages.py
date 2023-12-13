@@ -182,6 +182,15 @@ LANGUAGE_MAP = {
       "julia"
     ],
   },
+  "kotlin": {
+    "type": "programming",
+    "color": "#F18E33",
+    "extensions": {
+      ".kt",
+      ".ktm",
+      ".kts"
+    },
+  },
   "ocaml": {
     "type": "programming",
     "color": "#3be133",
