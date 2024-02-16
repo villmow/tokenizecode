@@ -8,6 +8,7 @@ class WrappedParser:
     This class wraps the code in a function or a class and then parses it. Returns the best result with
     the least amount of errors.
     """
+
     def __init__(self, parser: Union[CodeParser, CodeTokenizer]):
         self.parser = parser
         self.wrapper: dict[str, list[str]] = {
@@ -17,10 +18,12 @@ class WrappedParser:
             ],
             "php": [
                 "php_inside_class",
-            ]
+            ],
         }
 
-    def parse(self, code: str, language: str, name: Optional[str] = None) -> Union[CodeParsingOutput, tuple[CodeParsingOutput, str]]:
+    def parse(
+        self, code: str, language: str, name: Optional[str] = None
+    ) -> Union[CodeParsingOutput, tuple[CodeParsingOutput, str]]:
         if name is None:
             return self._parse_min_errors(code, language)
         elif name == "none":
@@ -32,9 +35,11 @@ class WrappedParser:
             parsing_output = self.parser.parse(wrapped_code, language)
             return unwrapper(parsing_output)
 
-    def _parse_min_errors(self, code: str, language: str) -> tuple[CodeParsingOutput, str]:
+    def _parse_min_errors(
+        self, code: str, language: str
+    ) -> tuple[CodeParsingOutput, str]:
         results = [
-           (self.parser.parse(code, language), "none")  # try to parse the code as is
+            (self.parser.parse(code, language), "none")  # try to parse the code as is
         ]
         parsing_functions = self.wrapper.get(language, [])
         for name in parsing_functions:
@@ -42,9 +47,11 @@ class WrappedParser:
             unwrapper = getattr(self, f"unwrap_{name}")
             wrapped_code = wrapper(code)
             parsing_output = self.parser.parse(wrapped_code, language)
-            results.append(
-                (unwrapper(parsing_output), name)
-            )
+            try:
+                results.append((unwrapper(parsing_output), name))
+            except Exception as e:
+                # then the default parsing_output is better
+                pass
         return min(results, key=lambda x: x[0].num_errors)
 
     @staticmethod
@@ -52,7 +59,9 @@ class WrappedParser:
         return f"public class Wrapper {{ public void method() {{{code}}}}}"
 
     @staticmethod
-    def unwrap_java_inside_method(parsing_output: CodeParsingOutput) -> CodeParsingOutput:
+    def unwrap_java_inside_method(
+        parsing_output: CodeParsingOutput,
+    ) -> CodeParsingOutput:
         if parsing_output.tree.get_node_data(0) == "[ERROR]":
             # then we cant unwrap
             return parsing_output
@@ -119,7 +128,9 @@ class WrappedParser:
         return "public class Wrapper {" + f"{code}" + "\n}"
 
     @staticmethod
-    def unwrap_java_inside_class(parsing_output: CodeParsingOutput) -> CodeParsingOutput:
+    def unwrap_java_inside_class(
+        parsing_output: CodeParsingOutput,
+    ) -> CodeParsingOutput:
         if parsing_output.tree.get_node_data(0) == "[ERROR]":
             # then we cant unwrap
             return parsing_output
@@ -204,7 +215,6 @@ class WrappedParser:
         try:
             assert method_tree.get_node_data(0) == "[method_declaration]"
         except AssertionError as e:
-            parsing_output.tree.pprint()
             print("#" * 100)
             print("Fatal could not detect method declaration.")
             print(parsing_output.num_errors)
@@ -212,8 +222,4 @@ class WrappedParser:
             raise e
 
         parsing_output.tree = method_tree
-
-        # added only a single row
-
-
         return parsing_output
