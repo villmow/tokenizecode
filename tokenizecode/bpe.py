@@ -102,9 +102,9 @@ def encode_terminals(
                 new_token_parents = (
                     new_idx  # np.arange(new_idx, new_idx + num_new_nodes)
                 )
-                new_parents[
-                    new_idx + 1 : new_idx + num_new_nodes + 1
-                ] = new_token_parents
+                new_parents[new_idx + 1 : new_idx + num_new_nodes + 1] = (
+                    new_token_parents
+                )
         else:
             # otherwise do nothing. parent is already copied
             new_tokens.append(token)
@@ -268,7 +268,7 @@ class TokenizerBPE:
         return encoding
 
     def decode_text(self, ids) -> str:
-        out = self.tokenizer.decode(ids)
+        out = self.tokenizer.decode(ids, clean_up_tokenization_spaces=False)
         return out
 
     def encode_tree(
@@ -469,9 +469,9 @@ class TokenizerBPE:
 
                 if num_new_tokens_for_leaf > 0:
                     # shift all parents except the one of the token thats already part of the tree
-                    new_parents[
-                        idx_bpe_token + num_new_tokens_for_leaf + 1 :
-                    ] = new_parents[idx_bpe_token + 1 : -num_new_tokens_for_leaf]
+                    new_parents[idx_bpe_token + num_new_tokens_for_leaf + 1 :] = (
+                        new_parents[idx_bpe_token + 1 : -num_new_tokens_for_leaf]
+                    )
 
                     # and adjust parent pointers to nodes defined after this node
                     new_parents[new_parents > idx_bpe_token] += num_new_tokens_for_leaf
@@ -488,9 +488,9 @@ class TokenizerBPE:
                 idx_bpe_token = idx_bpe_token
                 active[idx_bpe_token] = True  # set BPE token as active
                 active[idx_bpe_token + 1 :] = False  # and deactivate all other tokens
-                new_descendants[
-                    idx_bpe_token + num_new_tokens_for_leaf + 1 :
-                ] = new_descendants[idx_bpe_token + 1 : -num_new_tokens_for_leaf]
+                new_descendants[idx_bpe_token + num_new_tokens_for_leaf + 1 :] = (
+                    new_descendants[idx_bpe_token + 1 : -num_new_tokens_for_leaf]
+                )
 
                 # torch version
                 # new_descendants[idx_bpe_token + num_new_tokens_for_leaf + 1:] = new_descendants[idx_bpe_token + 1:-num_new_tokens_for_leaf].clone()
@@ -533,7 +533,9 @@ class TokenizerBPE:
             parents=tree.parents,
             descendants=tree.descendants,
             # node_data=self.tokenizer.decoder.decode(self.tokenizer.convert_ids_to_tokens(tree.node_data))
-            node_data=self.tokenizer.batch_decode(tree.node_data),
+            node_data=self.tokenizer.batch_decode(
+                tree.node_data, clean_up_tokenization_spaces=False
+            ),
         )
 
         if not keep_bpe:
