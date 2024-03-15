@@ -10,10 +10,18 @@ from tensortree import TensorTree
 
 from tokenizecode.bpe import TokenizerBPE
 from tokenizecode.parser import CodeParser, CodeParsingOutput, Span
-from tokenizecode.utils import TensorTreeWithStrings, TensorTreeWithInts, is_tree_of_strings, get_project_root
+from tokenizecode.utils import (
+    TensorTreeWithStrings,
+    TensorTreeWithInts,
+    is_tree_of_strings,
+    get_project_root,
+)
 
 
-DEFAULT_TOKENIZER_BPE = get_project_root() / "trained_tokenizers/20211108_bpe30k-fpl40k-with-nonterminals.json"
+DEFAULT_TOKENIZER_BPE = (
+    get_project_root()
+    / "trained_tokenizers/20211108_bpe30k-fpl40k-with-nonterminals.json"
+)
 
 
 @dataclass
@@ -26,9 +34,13 @@ class TokenizedCodeOutput(CodeParsingOutput):
 
 
 class CodeTokenizer:
-    """ Combines tokenizer and bpe. """
+    """Combines tokenizer and bpe."""
 
-    def __init__(self, tokenizer: Optional[TokenizerBPE] = None, parser: Optional[CodeParser] = None):
+    def __init__(
+        self,
+        tokenizer: Optional[TokenizerBPE] = None,
+        parser: Optional[CodeParser] = None,
+    ):
         if tokenizer is None:
             tokenizer = TokenizerBPE.from_pretrained(DEFAULT_TOKENIZER_BPE)
 
@@ -36,7 +48,10 @@ class CodeTokenizer:
         self._parser = parser if parser is not None else None
 
     def __eq__(self, other):
-        return self.__class__ == other.__class__ and self.hf_tokenizer.vocab == other.hf_tokenizer.vocab
+        return (
+            self.__class__ == other.__class__
+            and self.hf_tokenizer.vocab == other.hf_tokenizer.vocab
+        )
 
     @property
     def hf_tokenizer(self) -> transformers.PreTrainedTokenizerFast:
@@ -49,8 +64,10 @@ class CodeTokenizer:
 
         return self._parser
 
-    def _inputs_to_tree(self, inputs: Union[str, TensorTreeWithStrings], lang: Optional[str] = None) -> TensorTreeWithStrings:
-        """ Either parses a piece of code or uses the tree."""
+    def _inputs_to_tree(
+        self, inputs: Union[str, TensorTreeWithStrings], lang: Optional[str] = None
+    ) -> TensorTreeWithStrings:
+        """Either parses a piece of code or uses the tree."""
         if isinstance(inputs, str):
             code = inputs
 
@@ -73,15 +90,16 @@ class CodeTokenizer:
     @classmethod
     def from_file(cls, tokenizer_file_or_directory: Path):
         from tokenizecode.bpe import TokenizerBPE
+
         return cls(TokenizerBPE.from_pretrained(tokenizer_file_or_directory))
 
     def parse(self, code: str, lang: str) -> CodeParsingOutput:
-        """ Turns a piece code into a syntax tree. """
+        """Turns a piece code into a syntax tree."""
         return self.parser.parse(code, lang)
 
     @staticmethod
     def unparse(tree: Union[TensorTreeWithStrings, CodeParsingOutput]) -> str:
-        """ Turns a syntax_tree tree back into code. """
+        """Turns a syntax_tree tree back into code."""
         if isinstance(tree, CodeParsingOutput):
             tree = tree.tree
 
@@ -90,25 +108,34 @@ class CodeTokenizer:
 
         return CodeParser.unparse(tree)
 
-    def encode(self, inputs: Union[str, TensorTreeWithStrings], lang: Optional[str] = None) -> tokenizers.Encoding:
-        """ Encodes a piece of code or a syntax tree and returns an encoding for all tokens."""
+    def encode(
+        self, inputs: Union[str, TensorTreeWithStrings], lang: Optional[str] = None
+    ) -> tokenizers.Encoding:
+        """Encodes a piece of code or a syntax tree and returns an encoding for all tokens."""
         tree = self._inputs_to_tree(inputs, lang)
         return self.tokenizer.encode_text(tree.leaves())
 
     def encode_text(self, text: Union[str, list[str]]) -> tokenizers.Encoding:
-        """ Encodes any piece of text or list of text. """
+        """Encodes any piece of text or list of text."""
         return self.tokenizer.encode_text(text)
 
     def encode_to_tree(
-            self, inputs: Union[str, TensorTreeWithStrings], lang: Optional[str] = None
+        self, inputs: Union[str, TensorTreeWithStrings], lang: Optional[str] = None
     ) -> TensorTreeWithInts:
-        """ Encodes a piece of code or a syntax tree and returns **the full syntax tree** encoded (ie only ids as nodes)."""
+        """Encodes a piece of code or a syntax tree and returns **the full syntax tree** encoded (ie only ids as nodes)."""
 
         tree = self._inputs_to_tree(inputs, lang)
         return self.tokenizer.encode_tree(tree)
 
-    def encode_lines(self, code: str, lang: str, line_start: int, line_end: int,
-                     mask_line_start: int = None, mask_line_end: int = None) -> Union[tokenizers.Encoding, tuple[tokenizers.Encoding, tokenizers.Encoding]]:
+    def encode_lines(
+        self,
+        code: str,
+        lang: str,
+        line_start: int,
+        line_end: int,
+        mask_line_start: int = None,
+        mask_line_end: int = None,
+    ) -> Union[tokenizers.Encoding, tuple[tokenizers.Encoding, tokenizers.Encoding]]:
         """
         Parses the whole file and then selects relevant lines. Lines start at 1. If mask line start is set, those lines
         will be cut out and the mask token is inserted.
@@ -130,8 +157,10 @@ class CodeTokenizer:
                 continue
 
             if line_start <= span.start_point.row <= line_end:
-                if mask_line_start is not None and mask_line_start == span.start_point.row:
-
+                if (
+                    mask_line_start is not None
+                    and mask_line_start == span.start_point.row
+                ):
                     # keep first space
                     if node.isspace() and not mask_tokens:
                         context_tokens.append(node)
@@ -139,17 +168,25 @@ class CodeTokenizer:
 
                     mask_tokens.append(node)
 
-                elif mask_line_start is not None and mask_line_start <= span.start_point.row <= mask_line_end:
+                elif (
+                    mask_line_start is not None
+                    and mask_line_start <= span.start_point.row <= mask_line_end
+                ):
                     mask_tokens.append(node)
                 else:
                     context_tokens.append(node)
 
         if mask_line_start is not None:
-            return self.tokenizer.encode_text(context_tokens), self.tokenizer.encode_text(mask_tokens)
+            return self.tokenizer.encode_text(
+                context_tokens
+            ), self.tokenizer.encode_text(mask_tokens)
 
         return self.tokenizer.encode_text(context_tokens)
 
     def decode(self, ids) -> str:
+        if len(ids) == 0:
+            return ""
+
         if isinstance(ids, TensorTreeWithInts):
             tree = ids
             decoded_tree = self.decode_tree(tree, keep_bpe=False)
@@ -157,8 +194,10 @@ class CodeTokenizer:
 
         return self.tokenizer.decode_text(ids)
 
-    def decode_tree(self, tree: TensorTreeWithInts, keep_bpe: bool = False) -> TensorTreeWithStrings:
-        """ Returns a tree with strings as node data. keep_bpe keeps artificial BPE nodes. """
+    def decode_tree(
+        self, tree: TensorTreeWithInts, keep_bpe: bool = False
+    ) -> TensorTreeWithStrings:
+        """Returns a tree with strings as node data. keep_bpe keeps artificial BPE nodes."""
         return self.tokenizer.decode_tree(tree, keep_bpe)
 
     @staticmethod

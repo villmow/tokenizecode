@@ -8,11 +8,15 @@ from tensortree import TensorTree
 HAS_MAGIC = False
 try:
     import magic
+
     HAS_MAGIC = True
 except ImportError:
     import warnings
-    warnings.warn("Please install python-magic to determine file encoding (requires libmagic"
-                  "to be available on your system).")
+
+    warnings.warn(
+        "Please install python-magic to determine file encoding (requires libmagic"
+        "to be available on your system)."
+    )
 
 
 def get_project_root() -> Path:
@@ -25,6 +29,7 @@ def smart_read_file(filepath: Union[str, Path]) -> str:
     :param filepath:
     :return:
     """
+
     def _read_file(filepath: Path, encoding: Optional[str]) -> str:
         with filepath.open("rt", encoding=encoding) as f:
             return f.read()
@@ -59,8 +64,14 @@ TensorTreeWithInts = TensorTree  # with ints (ids) as nodes
 
 from tokenizecode.parser import Span, Point
 
-def adjust_positions(tree1: TensorTreeWithStrings, tree2: TensorTreeWithInts, positions: list[Span], bpe_id: int) -> list[Span]:
-    """ Inaccurate the span of a splitted token is just the span of its original word. If """
+
+def adjust_positions(
+    tree1: TensorTreeWithStrings,
+    tree2: TensorTreeWithInts,
+    positions: list[Span],
+    bpe_id: int,
+) -> list[Span]:
+    """Inaccurate the span of a splitted token is just the span of its original word. If"""
     assert len(positions) == len(tree1)
 
     result: list[Span] = []

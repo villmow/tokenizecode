@@ -124,5 +124,7 @@ class TestCodeParser(unittest.TestCase):
                 self.assertSequenceEqual(code, decoded_code)
 
 
+
+
 if __name__ == '__main__':
     unittest.main()
