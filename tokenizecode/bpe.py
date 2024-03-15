@@ -435,7 +435,7 @@ class TokenizerBPE:
                 if num_tries > 50:
                     raise ValueError("Maximum amount of tries exceeded")
 
-                print(
+                log.debug(
                     f"Empty node {old_node_idx} detected. Will delete empty node and restart."
                 )
                 new_tree = tree.delete_node(old_node_idx)
