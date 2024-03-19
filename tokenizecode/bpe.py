@@ -435,10 +435,27 @@ class TokenizerBPE:
                 if num_tries > 50:
                     raise ValueError("Maximum amount of tries exceeded")
 
+                # check which node to delete. we need to delete the node and all ancestors that have no other children
+                node_to_delete = old_node_idx
+
+                c = 5
+                depth = 0
+                while tree.get_parent(node_to_delete) is not None and c > 0:
+                    c -= 1
+                    parent = tree.get_parent(node_to_delete)
+
+                    # if the parent has no other children, we need to delete it as well
+                    if tree.get_number_of_descendants(parent) == depth + 1:
+                        node_to_delete = parent
+                        depth += 1
+                    # otherwise we can stop
+                    else:
+                        break
+
                 log.debug(
-                    f"Empty node {old_node_idx} detected. Will delete empty node and restart."
+                    f"Empty node {node_to_delete} detected. Will delete empty node and restart."
                 )
-                new_tree = tree.delete_node(old_node_idx)
+                new_tree = tree.delete_node(node_to_delete)
                 return self.encode_tree(new_tree, num_tries=num_tries + 1)
 
             # Leaf, which has been splitted
